@@ -1,0 +1,6 @@
+cli/BodyMonitor/build/
+**/*.o
+**/*.ppu
+**/node_modules/
+**/.quasar/
+**/dist/

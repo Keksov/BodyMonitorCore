@@ -1,4 +1,8 @@
 cli/BodyMonitor/build/
+# NeuroSky runtime DLLs are sourced from VendorsCore/MindWave.
+cli/AlgoSdkDll64.dll
+cli/thinkgear64.dll
+cli/vendor/EEGAlgoSDK/AlgoSdkDll64.dll
 **/*.o
 **/*.ppu
 **/node_modules/

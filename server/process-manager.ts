@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { basename, resolve } from "node:path"
+import { existsSync } from "node:fs"
+import { basename, dirname, resolve } from "node:path"
 import type { PipedSubprocess } from "bun"
 import {
   isServerReadyLine,
@@ -94,6 +95,24 @@ const buildCommandLine = (aExecutablePath: string, aParams: readonly string[]): 
   return [basename(aExecutablePath), ...aParams].map(quoteCommandLineArg).join(" ")
 }
 
+const resolveBodyMonitorExecutablePath = (aWorkspaceRoot: string): {
+  readonly bodyMonitorCwd: string
+  readonly bodyMonitorExePath: string
+} => {
+  const candidatePaths = [
+    resolve(import.meta.dir, "..", "cli", "build", "x64", "BodyMonitor.exe"),
+    resolve(aWorkspaceRoot, "BodyMonitorCore", "cli", "build", "x64", "BodyMonitor.exe"),
+    resolve(aWorkspaceRoot, "products", "BodyMonitorCore", "cli", "BodyMonitor", "build", "x64", "BodyMonitor.exe"),
+  ]
+
+  const bodyMonitorExePath = candidatePaths.find((candidatePath) => existsSync(candidatePath)) ?? candidatePaths[0]
+
+  return {
+    bodyMonitorCwd: dirname(bodyMonitorExePath),
+    bodyMonitorExePath,
+  }
+}
+
 const forEachLine = async (
   aStream: ReadableStream<Uint8Array<ArrayBuffer>> | null,
   aLineHandler: (aLine: string) => void | Promise<void>
@@ -144,16 +163,9 @@ export class ProcessManager {
   private pendingListDevicesAfterStop = false
 
   public constructor(aWorkspaceRoot: string) {
-    this.bodyMonitorCwd = resolve(
-      aWorkspaceRoot,
-      "products",
-      "BodyMonitorCore",
-      "cli",
-      "BodyMonitor",
-      "build",
-      "x64"
-    )
-    this.bodyMonitorExePath = resolve(this.bodyMonitorCwd, "BodyMonitor.exe")
+    const { bodyMonitorCwd, bodyMonitorExePath } = resolveBodyMonitorExecutablePath(aWorkspaceRoot)
+    this.bodyMonitorCwd = bodyMonitorCwd
+    this.bodyMonitorExePath = bodyMonitorExePath
   }
 
   public getState(): ProcessStateSnapshot {

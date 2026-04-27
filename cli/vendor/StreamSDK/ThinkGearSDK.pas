@@ -54,9 +54,51 @@ function    TG_EnableAutoRead(aConnectionId: Integer; aEnable: Integer): Integer
 procedure   TG_Disconnect(aConnectionId: Integer); cdecl; external 'thinkgear64.dll';
 procedure   TG_FreeConnection(aConnectionId: Integer); cdecl; external 'thinkgear64.dll';
 
-function    MWM15_getFilterType(aConnectionId: Integer): Integer; cdecl; external 'thinkgear64.dll';
-function    MWM15_setFilterType(aConnectionId: Integer; aFilterType: Integer): Integer; cdecl; external 'thinkgear64.dll';
+function    MWM15_getFilterType(aConnectionId: Integer): Integer; cdecl;
+function    MWM15_setFilterType(aConnectionId: Integer; aFilterType: Integer): Integer; cdecl;
 
 implementation
+
+uses
+    Windows;
+
+type
+    TMWM15GetFilterType = function(aConnectionId: Integer): Integer; cdecl;
+    TMWM15SetFilterType = function(aConnectionId: Integer; aFilterType: Integer): Integer; cdecl;
+
+var
+    MWM15GetFilterTypeProc: TMWM15GetFilterType;
+    MWM15SetFilterTypeProc: TMWM15SetFilterType;
+
+function getOptionalThinkGearProc(const aProcName: PAnsiChar): Pointer;
+var
+    moduleHandle: HMODULE;
+begin
+    moduleHandle := GetModuleHandleA('thinkgear64.dll');
+    if moduleHandle = 0 then
+        Exit(nil);
+
+    Result := GetProcAddress(moduleHandle, aProcName);
+end;
+
+function MWM15_getFilterType(aConnectionId: Integer): Integer; cdecl;
+begin
+    if not Assigned(MWM15GetFilterTypeProc) then
+        Exit(-1);
+
+    Result := MWM15GetFilterTypeProc(aConnectionId);
+end;
+
+function MWM15_setFilterType(aConnectionId: Integer; aFilterType: Integer): Integer; cdecl;
+begin
+    if not Assigned(MWM15SetFilterTypeProc) then
+        Exit(-1);
+
+    Result := MWM15SetFilterTypeProc(aConnectionId, aFilterType);
+end;
+
+initialization
+    Pointer(MWM15GetFilterTypeProc) := getOptionalThinkGearProc('MWM15_getFilterType');
+    Pointer(MWM15SetFilterTypeProc) := getOptionalThinkGearProc('MWM15_setFilterType');
 
 end.

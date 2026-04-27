@@ -43,6 +43,7 @@ const MIN_VALID_MAX_RR_MS = 300
 
 const STORAGE_FOUND_DEVICES = 'mw_devices'
 const STORAGE_MARKED_DEVICES = 'mw_markedDevices'
+const STORAGE_INACTIVE_DEVICES = 'mw_inactiveDevices'
 const STORAGE_SELECTION = 'mw_selectedDevices'
 const STORAGE_BREATH_SETTINGS = 'mw_breathSettings'
 const STORAGE_CONNECT_TIMEOUTS = 'mw_connectTimeoutSecByDevice'
@@ -121,6 +122,28 @@ const sanitizeSelectedDevicesMap = (value: unknown): Record<string, string | nul
     if (selectedMac === null) {
       result[capability] = null
     }
+  }
+
+  return result
+}
+
+const sanitizeMacList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const result: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') {
+      continue
+    }
+
+    const mac = entry.trim()
+    if (mac === '' || result.includes(mac)) {
+      continue
+    }
+
+    result.push(mac)
   }
 
   return result
@@ -309,30 +332,26 @@ const syncMarkedDevicesWithFoundDevices = (
   })
 }
 
-const deactivateSelectionsMissingFromFoundDevices = (
-  selectedMap: Record<string, string | null>,
+const syncInactiveDeviceMacsWithFoundDevices = (
+  inactiveDeviceMacs: readonly string[],
+  markedDevices: readonly DeviceInfo[],
   foundDevices: readonly DeviceInfo[],
-): Record<string, string | null> => {
-  const foundDevicesByMac = new Map(foundDevices.map((deviceInfo) => [deviceInfo.mac, deviceInfo]))
-  let hasChanges = false
-  const nextSelectedMap = { ...selectedMap }
+): string[] => {
+  const markedMacs = new Set(markedDevices.map((deviceInfo) => deviceInfo.mac))
+  const foundMacs = new Set(foundDevices.map((deviceInfo) => deviceInfo.mac))
+  const result = inactiveDeviceMacs.filter((mac) => markedMacs.has(mac))
 
-  for (const capability of selectableCapabilities) {
-    const mac = nextSelectedMap[capability]
-    if (typeof mac !== 'string' || mac.trim() === '') {
-      continue
+  for (const markedDevice of markedDevices) {
+    if (!foundMacs.has(markedDevice.mac) && !result.includes(markedDevice.mac)) {
+      result.push(markedDevice.mac)
     }
-
-    const foundDevice = foundDevicesByMac.get(mac)
-    if (foundDevice !== undefined && foundDevice.capabilities.includes(capability)) {
-      continue
-    }
-
-    nextSelectedMap[capability] = null
-    hasChanges = true
   }
 
-  return hasChanges ? nextSelectedMap : selectedMap
+  return result
+}
+
+const hasKnownCapabilityType = (deviceInfo: DeviceInfo): boolean => {
+  return deviceInfo.capabilities.some((capability) => capabilityMeta[capability] !== undefined)
 }
 
 const sanitizeConnectTimeoutSec = (value: unknown): number => {
@@ -405,19 +424,22 @@ export const useDeviceStore = defineStore('device', () => {
     ? sanitizeDeviceInfoList(loadJson<unknown>(STORAGE_MARKED_DEVICES, []))
     : []
   const migratedMarkedDevices = buildMigratedMarkedDevices(initialSelectedDevices, initialFoundDevices)
+  const initialMarkedDevices = syncMarkedDevicesWithFoundDevices(
+    hasStoredMarkedDevices
+      ? mergeDeviceInfoLists(initialStoredMarkedDevices, migratedMarkedDevices)
+      : migratedMarkedDevices,
+    initialFoundDevices,
+  )
+  const initialInactiveDeviceMacs = syncInactiveDeviceMacsWithFoundDevices(
+    sanitizeMacList(loadJson<unknown>(STORAGE_INACTIVE_DEVICES, [])),
+    initialMarkedDevices,
+    initialFoundDevices,
+  )
 
   const foundDevices = ref<DeviceInfo[]>(initialFoundDevices)
-  const markedDevices = ref<DeviceInfo[]>(
-    syncMarkedDevicesWithFoundDevices(
-      hasStoredMarkedDevices
-        ? mergeDeviceInfoLists(initialStoredMarkedDevices, migratedMarkedDevices)
-        : migratedMarkedDevices,
-      initialFoundDevices,
-    ),
-  )
-  const selectedDevices = ref<Record<string, string | null>>(
-    deactivateSelectionsMissingFromFoundDevices(initialSelectedDevices, initialFoundDevices),
-  )
+  const markedDevices = ref<DeviceInfo[]>(initialMarkedDevices)
+  const inactiveDeviceMacs = ref<string[]>(initialInactiveDeviceMacs)
+  const selectedDevices = ref<Record<string, string | null>>(initialSelectedDevices)
   const breathSettings = ref<Record<string, BreathSettings>>(
     sanitizeBreathSettingsMap(loadJson<unknown>(STORAGE_BREATH_SETTINGS, {})),
   )
@@ -431,6 +453,7 @@ export const useDeviceStore = defineStore('device', () => {
 
   watch(foundDevices, v => localStorage.setItem(STORAGE_FOUND_DEVICES, JSON.stringify(v)), { deep: true, immediate: true })
   watch(markedDevices, v => localStorage.setItem(STORAGE_MARKED_DEVICES, JSON.stringify(v)), { deep: true, immediate: true })
+  watch(inactiveDeviceMacs, v => localStorage.setItem(STORAGE_INACTIVE_DEVICES, JSON.stringify(v)), { deep: true, immediate: true })
   watch(selectedDevices, v => localStorage.setItem(STORAGE_SELECTION, JSON.stringify(v)), { deep: true, immediate: true })
   watch(breathSettings, v => localStorage.setItem(STORAGE_BREATH_SETTINGS, JSON.stringify(v)), { deep: true })
   watch(connectTimeoutSecByDevice, v => localStorage.setItem(STORAGE_CONNECT_TIMEOUTS, JSON.stringify(v)), { deep: true, immediate: true })
@@ -442,10 +465,32 @@ export const useDeviceStore = defineStore('device', () => {
   const hasSelection = computed(() =>
     selectableCapabilities.some(capability => getSelectedMac(capability) != null),
   )
-  const hasDevices = computed(() => foundDevices.value.length > 0)
+  const hasDevices = computed(() => foundDevices.value.length > 0 || markedDevices.value.length > 0)
   const foundDevicesByMac = computed(() => new Map(foundDevices.value.map((deviceInfo) => [deviceInfo.mac, deviceInfo])))
   const markedDevicesByMac = computed(() => new Map(markedDevices.value.map((deviceInfo) => [deviceInfo.mac, deviceInfo])))
+  const inactiveDeviceMacSet = computed(() => new Set(inactiveDeviceMacs.value))
   const devices = computed<readonly DeviceInfo[]>(() => foundDevices.value)
+  const topListDevices = computed<readonly DeviceInfo[]>(() => markedDevices.value)
+  const scanDevices = computed<readonly DeviceInfo[]>(() => {
+    const topListMacs = new Set(markedDevices.value.map((deviceInfo) => deviceInfo.mac))
+    const knownDevices: DeviceInfo[] = []
+    const unknownDevices: DeviceInfo[] = []
+
+    for (const deviceInfo of foundDevices.value) {
+      if (topListMacs.has(deviceInfo.mac)) {
+        continue
+      }
+
+      if (hasKnownCapabilityType(deviceInfo)) {
+        knownDevices.push(deviceInfo)
+        continue
+      }
+
+      unknownDevices.push(deviceInfo)
+    }
+
+    return [...knownDevices, ...unknownDevices]
+  })
   const selectedDeviceInfos = computed<readonly DeviceInfo[]>(() => {
     const selectedCapabilitiesByMac = collectSelectedCapabilitiesByMac(selectedDevices.value)
 
@@ -460,6 +505,10 @@ export const useDeviceStore = defineStore('device', () => {
     for (const capability of selectableCapabilities) {
       const mac = getSelectedMac(capability)
       if (mac === null) {
+        continue
+      }
+
+      if (inactiveDeviceMacSet.value.has(mac)) {
         continue
       }
 
@@ -496,12 +545,42 @@ export const useDeviceStore = defineStore('device', () => {
     return foundDevicesByMac.value.has(mac)
   }
 
+  function isDeviceInactive(mac: string): boolean {
+    return inactiveDeviceMacSet.value.has(mac)
+  }
+
   function isCapabilityActive(capability: string, mac: string): boolean {
     return getSelectedMac(capability) === mac
   }
 
   function markDevice(deviceInfo: DeviceInfo) {
     markedDevices.value = upsertDeviceInfo(markedDevices.value, deviceInfo)
+  }
+
+  function rememberFoundDevice(deviceInfo: DeviceInfo) {
+    if (!foundDevicesByMac.value.has(deviceInfo.mac)) {
+      return
+    }
+
+    markDevice(deviceInfo)
+    setDeviceInactive(deviceInfo.mac, false)
+  }
+
+  function setDeviceInactive(mac: string, inactive: boolean) {
+    if (inactive) {
+      if (!markedDevicesByMac.value.has(mac) || inactiveDeviceMacSet.value.has(mac)) {
+        return
+      }
+
+      inactiveDeviceMacs.value = [...inactiveDeviceMacs.value, mac]
+      return
+    }
+
+    if (!inactiveDeviceMacSet.value.has(mac)) {
+      return
+    }
+
+    inactiveDeviceMacs.value = inactiveDeviceMacs.value.filter((entry) => entry !== mac)
   }
 
   function activateFoundDevice(capability: string, deviceInfo: DeviceInfo) {
@@ -514,6 +593,7 @@ export const useDeviceStore = defineStore('device', () => {
     }
 
     markDevice(deviceInfo)
+    setDeviceInactive(deviceInfo.mac, false)
     selectedDevices.value = { ...selectedDevices.value, [capability]: deviceInfo.mac }
   }
 
@@ -545,17 +625,19 @@ export const useDeviceStore = defineStore('device', () => {
       return
     }
 
-    const foundDevice = foundDevicesByMac.value.get(mac)
-    if (foundDevice === undefined || !foundDevice.capabilities.includes(capability)) {
+    const knownDevice = foundDevicesByMac.value.get(mac) ?? markedDevicesByMac.value.get(mac)
+    if (knownDevice === undefined || !knownDevice.capabilities.includes(capability)) {
       return
     }
 
-    markDevice(foundDevice)
+    markDevice(knownDevice)
+    setDeviceInactive(mac, false)
     selectedDevices.value = { ...selectedDevices.value, [capability]: mac }
   }
 
   function removeMarkedDevice(mac: string) {
     markedDevices.value = markedDevices.value.filter((deviceInfo) => deviceInfo.mac !== mac)
+    inactiveDeviceMacs.value = inactiveDeviceMacs.value.filter((entry) => entry !== mac)
 
     const nextSelectedDevices = { ...selectedDevices.value }
     let hasChanges = false
@@ -646,13 +728,19 @@ export const useDeviceStore = defineStore('device', () => {
 
   function handleDevices(event: BodyMonitorDevicesEvent) {
     const nextFoundDevices = sanitizeDeviceInfoList(event.devices)
+    const nextMarkedDevices = syncMarkedDevicesWithFoundDevices(markedDevices.value, nextFoundDevices)
     foundDevices.value = nextFoundDevices
-    markedDevices.value = syncMarkedDevicesWithFoundDevices(markedDevices.value, nextFoundDevices)
-    selectedDevices.value = deactivateSelectionsMissingFromFoundDevices(selectedDevices.value, nextFoundDevices)
+    markedDevices.value = nextMarkedDevices
+    inactiveDeviceMacs.value = syncInactiveDeviceMacsWithFoundDevices(
+      inactiveDeviceMacs.value,
+      nextMarkedDevices,
+      nextFoundDevices,
+    )
   }
 
   function clearFoundDevices() {
     foundDevices.value = []
+    inactiveDeviceMacs.value = syncInactiveDeviceMacsWithFoundDevices(inactiveDeviceMacs.value, markedDevices.value, [])
   }
 
   function clearDevices() {
@@ -664,9 +752,12 @@ export const useDeviceStore = defineStore('device', () => {
     browsing,
     foundDevices,
     markedDevices,
+    inactiveDeviceMacs,
     selectedDevices,
     breathSettings,
     devices,
+    topListDevices,
+    scanDevices,
     selectedDeviceInfos,
     deviceCount,
     hasDevices,
@@ -678,10 +769,13 @@ export const useDeviceStore = defineStore('device', () => {
     getConnectableMac,
     isMarkedDevice,
     isMarkedDeviceFound,
+    isDeviceInactive,
     isCapabilityActive,
+    rememberFoundDevice,
     activateFoundDevice,
     selectDevice,
     setMarkedDeviceCapabilityActive,
+    setDeviceInactive,
     removeMarkedDevice,
     getBreathSettings,
     getConnectTimeoutSec,

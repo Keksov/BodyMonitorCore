@@ -107,8 +107,8 @@ begin
                     Format('ALGO BLINK = %.0f', [aParam.param.algoIndex.value.eyeBlinkStrength]));
                 if gAlgoLogger <> nil then
                     gAlgoLogger.pushLine('{' + jsonLogTimestamp('br') +
-                        ',"event":"algo_blink"' +
-                        ',"strength":' + jsonLogFloat3(aParam.param.algoIndex.value.eyeBlinkStrength) + '}');
+                        ',"e":"ab"' +
+                        ',"sg":' + jsonLogFloat3(aParam.param.algoIndex.value.eyeBlinkStrength) + '}');
             end;
             NSK_ALGO_TYPE_BP:
             begin
@@ -125,12 +125,12 @@ begin
                     ));
                 if gAlgoLogger <> nil then
                     gAlgoLogger.pushLine('{' + jsonLogTimestamp('br') +
-                        ',"event":"algo_bp"' +
-                        ',"delta":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.deltaPower) +
-                        ',"theta":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.thetaPower) +
-                        ',"alpha":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.alphaPower) +
-                        ',"beta":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.betaPower) +
-                        ',"gamma":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.gammaPower) + '}');
+                        ',"e":"ap"' +
+                        ',"d":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.deltaPower) +
+                        ',"th":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.thetaPower) +
+                        ',"a":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.alphaPower) +
+                        ',"b":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.betaPower) +
+                        ',"g":' + jsonLogFloat3(aParam.param.algoIndex.value.bpIndex.gammaPower) + '}');
             end;
         end;
     end;
@@ -506,19 +506,19 @@ begin
 
     if Flogger <> nil then
         Flogger.pushLine('{' + jsonLogTimestamp('br') +
-            ',"event":"snapshot"' +
-            ',"raw":' + jsonLogFloat3(vRaw) +
-            ',"poorSignal":' + jsonLogFloat3(vPoorSignal) +
-            ',"attention":' + jsonLogFloat3(vAttention) +
-            ',"meditation":' + jsonLogFloat3(vMeditation) +
-            ',"delta":' + jsonLogFloat3(vDelta) +
-            ',"theta":' + jsonLogFloat3(vTheta) +
-            ',"alpha1":' + jsonLogFloat3(vAlpha1) +
-            ',"alpha2":' + jsonLogFloat3(vAlpha2) +
-            ',"beta1":' + jsonLogFloat3(vBeta1) +
-            ',"beta2":' + jsonLogFloat3(vBeta2) +
-            ',"gamma1":' + jsonLogFloat3(vGamma1) +
-            ',"gamma2":' + jsonLogFloat3(vGamma2) + '}');
+            ',"e":"s"' +
+            ',"rw":' + jsonLogFloat3(vRaw) +
+            ',"ps":' + jsonLogFloat3(vPoorSignal) +
+            ',"at":' + jsonLogFloat3(vAttention) +
+            ',"md":' + jsonLogFloat3(vMeditation) +
+            ',"d":' + jsonLogFloat3(vDelta) +
+            ',"th":' + jsonLogFloat3(vTheta) +
+            ',"a1":' + jsonLogFloat3(vAlpha1) +
+            ',"a2":' + jsonLogFloat3(vAlpha2) +
+            ',"b1":' + jsonLogFloat3(vBeta1) +
+            ',"b2":' + jsonLogFloat3(vBeta2) +
+            ',"g1":' + jsonLogFloat3(vGamma1) +
+            ',"g2":' + jsonLogFloat3(vGamma2) + '}');
 
     FhasFreshEegSnapshot := False;
 end;

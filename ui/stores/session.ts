@@ -939,13 +939,7 @@ export const useSessionStore = defineStore('session', () => {
 
   function beginConnect(aCommandLine: string) {
     const device = useDeviceStore()
-    const targets: Record<string, string> = {}
-
-    for (const [capability, mac] of Object.entries(device.selectedDevices)) {
-      if (typeof mac === 'string' && mac !== '') {
-        targets[capability] = mac
-      }
-    }
+    const targets: Record<string, string> = { ...device.connectTargets }
 
     isConnecting.value = true
     isScanning.value = false

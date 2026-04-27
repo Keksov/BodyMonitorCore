@@ -85,6 +85,30 @@ implementation
 uses
     DeviceScanner;
 
+function breathPhaseToCompactText(aPhase: TBreathPhaseType): string;
+begin
+    case aPhase of
+        BREATH_PHASE_INHALE:
+            Result := 'i';
+        BREATH_PHASE_EXHALE:
+            Result := 'e';
+    else
+        Result := '';
+    end;
+end;
+
+function breathExtremumToCompactText(aPhase: TBreathPhaseType): string;
+begin
+    case aPhase of
+        BREATH_PHASE_INHALE:
+            Result := 'pk';
+        BREATH_PHASE_EXHALE:
+            Result := 'vy';
+    else
+        Result := '';
+    end;
+end;
+
 {*******************************************************************************
 * heartRateDisconnectedCallback
 *******************************************************************************}
@@ -178,14 +202,14 @@ begin
                 if reader.Flogger <> nil then
                 begin
                     eventJson := '{' + jsonLogTimestamp('br') +
-                        ',"event":"breath_phase"' +
-                        ',"phase":"' + breathPhaseToText(eventInfo.Phase) + '"' +
-                        ',"extremum":"' + breathExtremumToText(eventInfo.Phase) + '"' +
-                        ',"hr":' + IntToStr(eventInfo.HrValue) +
-                        ',"rr_raw_ms":' + jsonLogFloat3(eventInfo.RawRrMs) +
-                        ',"rr_smooth_ms":' + jsonLogFloat3(eventInfo.SmoothRrMs) +
-                        ',"delta_ms":' + jsonLogFloat3(eventInfo.DeltaMs) +
-                        ',"sample_index":' + IntToStr(eventInfo.SampleIndex) + '}';
+                        ',"e":"bp"' +
+                        ',"p":"' + breathPhaseToCompactText(eventInfo.Phase) + '"' +
+                        ',"x":"' + breathExtremumToCompactText(eventInfo.Phase) + '"' +
+                        ',"h":' + IntToStr(eventInfo.HrValue) +
+                        ',"r0":' + jsonLogFloat3(eventInfo.RawRrMs) +
+                        ',"r1":' + jsonLogFloat3(eventInfo.SmoothRrMs) +
+                        ',"dm":' + jsonLogFloat3(eventInfo.DeltaMs) +
+                        ',"si":' + IntToStr(eventInfo.SampleIndex) + '}';
                     reader.Flogger.pushLine(eventJson);
                 end;
 
@@ -215,9 +239,9 @@ begin
     begin
         reader.Flogger.pushLine(
             '{' + jsonLogTimestamp('br') +
-            ',"event":"hr_notification"' +
-            ',"hr":' + IntToStr(hrValue) +
-            ',"rr":[' + rrJson + ']}');
+            ',"e":"hr"' +
+            ',"h":' + IntToStr(hrValue) +
+            ',"r":[' + rrJson + ']}');
     end;
 
     if (reader <> nil) and reader.FbreathOnlyOutput then

@@ -23,8 +23,7 @@ begin
     WriteLn('Usage:');
     WriteLn('  BodyMonitor.exe [--eeg[=<port_or_mac_or_name>]] [--ecg[=<device_id>|<device_name>]] [--log <file|->]');
     WriteLn('  BodyMonitor.exe [--breath[=<device_id>|<device_name>|true|false>] [--breath-min-delta=<ms>] [--breath-rr-max=<ms>]] ...');
-    WriteLn('  BodyMonitor.exe [--log-format=<plain|csv|jsonl>] ...');
-    WriteLn('  BodyMonitor.exe [--csv-columns=<true|false>] ...');
+    WriteLn('  BodyMonitor.exe [--log-format=<plain|jsonl>] ...');
     WriteLn('  BodyMonitor.exe --list-devices');
     WriteLn;
     WriteLn('Options:');
@@ -41,8 +40,7 @@ begin
     WriteLn('  --eeg-stale-sec     EEG disconnect threshold in seconds [default: 10]');
     WriteLn('  --log <file>        Write parameter log to <file>');
     WriteLn('  --log -             Write parameter log to stdout');
-    WriteLn('  --log-format        Log output format: plain, csv or jsonl [default: plain]');
-    WriteLn('  --csv-columns       Print CSV column names before first row [default: false]');
+    WriteLn('  --log-format        Log output format: plain or jsonl [default: plain]');
     WriteLn('  --full-scan         Process all scanned devices (default: false for --eeg/--ecg)');
     WriteLn('  --list-devices      List all available COM port devices and exit');
     WriteLn('  --server            Start persistent Bun-controlled server mode');
@@ -137,28 +135,17 @@ end;
 
 {*******************************************************************************
 * writeListDeviceLine
-*   Wrapper for writeBleDeviceInfo that also outputs legacy CSV to console.
 *******************************************************************************}
 procedure writeListDeviceLine(aLogger: TLogCore; aIndex: Integer;
     const aMac: string; const aIdentifier: string; const aDeviceType: string;
     const aComPort: string);
-var
-    csvLine: string;
 begin
-    if aComPort <> '' then
-        csvLine := Format('%d,%s,%s,%s,com:%s', [
-            aIndex, aMac, aIdentifier, aDeviceType, aComPort])
-    else
-        csvLine := Format('%d,%s,%s,%s', [
-            aIndex, aMac, aIdentifier, aDeviceType]);
-
-    writeBleDeviceInfo(aLogger, aIndex, aMac, aIdentifier, aDeviceType, aComPort, csvLine);
+    writeBleDeviceInfo(aLogger, aIndex, aMac, aIdentifier, aDeviceType, aComPort);
 end;
 
 {*******************************************************************************
 * printListDevices
 *   Scans BLE devices, classifies them by services and shows COM ports.
-*   Format: <counter>,<mac>,<identifier>,<device_type>[,com:<port>]
 *******************************************************************************}
 procedure printListDevices(aLogger: TLogCore);
 var
@@ -357,7 +344,7 @@ protected
     function    parseModeArgsFromList(out aUseEeg: Boolean;
         out aEegPort: AnsiString; out aUseEcg: Boolean;
         out aEcgFilter: string; out aLogTarget: string;
-        out aLogFormat: TLogOutputFormat; out aCsvColumns: Boolean;
+        out aLogFormat: TLogOutputFormat;
         out aBreathEnabled: Boolean; out aBreathOnlyOutput: Boolean;
         out aBreathMinDelta: Double; out aBreathMaxRr: Double;
         out aEegStaleSec: Integer;
@@ -484,7 +471,7 @@ constructor TListDevicesThread.Create();
 begin
     inherited Create(True);
     FreeOnTerminate := False;
-    Flogger := TLogCore.Create('-', LOG_FORMAT_JSONL, False);
+    Flogger := TLogCore.Create('-', LOG_FORMAT_JSONL);
     Fscanner := TDeviceScanner.Create(Flogger);
     Fsuccess := False;
     FcancelRequested := 0;
@@ -618,7 +605,7 @@ end;
 procedure initModeArgsDefaults(out aUseEeg: Boolean; out aEegPort: AnsiString;
     out aUseEcg: Boolean; out aEcgFilter: string;
     out aLogTarget: string; out aLogFormat: TLogOutputFormat;
-    out aCsvColumns: Boolean; out aBreathEnabled: Boolean;
+    out aBreathEnabled: Boolean;
     out aBreathOnlyOutput: Boolean; out aBreathMinDelta: Double;
     out aBreathMaxRr: Double; out aEegStaleSec: Integer;
     out aFullScan: Boolean);
@@ -629,7 +616,6 @@ begin
     aEegPort := '';
     aLogTarget := '';
     aLogFormat := LOG_FORMAT_PLAIN;
-    aCsvColumns := False;
     aBreathEnabled := False;
     aBreathOnlyOutput := False;
     aBreathMinDelta := 3.0;
@@ -674,7 +660,7 @@ function parseModeArgsCore(const aArgs: TStringArray;
     out aUseEeg: Boolean; out aEegPort: AnsiString;
     out aUseEcg: Boolean; out aEcgFilter: string;
     out aLogTarget: string; out aLogFormat: TLogOutputFormat;
-    out aCsvColumns: Boolean; out aBreathEnabled: Boolean;
+    out aBreathEnabled: Boolean;
     out aBreathOnlyOutput: Boolean; out aBreathMinDelta: Double;
     out aBreathMaxRr: Double; out aEegStaleSec: Integer;
     out aFullScan: Boolean;
@@ -696,7 +682,7 @@ begin
     Result := False;
     aErrorMessage := '';
     initModeArgsDefaults(aUseEeg, aEegPort, aUseEcg, aEcgFilter, aLogTarget,
-        aLogFormat, aCsvColumns, aBreathEnabled, aBreathOnlyOutput,
+        aLogFormat, aBreathEnabled, aBreathOnlyOutput,
         aBreathMinDelta, aBreathMaxRr, aEegStaleSec, aFullScan);
 
     n := Length(aArgs);
@@ -728,7 +714,7 @@ begin
             Inc(i, 2);
             if i - 1 >= n then
             begin
-                aErrorMessage := '--log-format requires one of: plain, jsonl, csv.';
+                aErrorMessage := '--log-format requires one of: plain, jsonl.';
                 Exit;
             end;
 
@@ -736,7 +722,7 @@ begin
             if not TLogCore.tryParseLogFormat(valueText, aLogFormat) then
             begin
                 aErrorMessage := 'Invalid --log-format value: ' + valueText +
-                    ' (expected plain, jsonl or csv).';
+                    ' (expected plain or jsonl).';
                 Exit;
             end;
 
@@ -864,14 +850,14 @@ begin
             valueText := Trim(Copy(arg, eqPos + 1, MaxInt));
             if valueText = '' then
             begin
-                aErrorMessage := '--log-format requires one of: plain, jsonl, csv.';
+                aErrorMessage := '--log-format requires one of: plain, jsonl.';
                 Exit;
             end;
 
             if not TLogCore.tryParseLogFormat(valueText, aLogFormat) then
             begin
                 aErrorMessage := 'Invalid --log-format value: ' + valueText +
-                    ' (expected plain, jsonl or csv).';
+                    ' (expected plain or jsonl).';
                 Exit;
             end;
 
@@ -882,34 +868,14 @@ begin
 
         if lowerArg = '--csv-columns' then
         begin
-            if (i + 1 < n) and ((LowerCase(aArgs[i + 1]) = 'true') or
-                (LowerCase(aArgs[i + 1]) = 'false')) then
-            begin
-                aCsvColumns := LowerCase(aArgs[i + 1]) = 'true';
-                Inc(i, 2);
-            end
-            else
-            begin
-                aCsvColumns := True;
-                Inc(i);
-            end;
-            Continue;
+            aErrorMessage := '--csv-columns is no longer supported.';
+            Exit;
         end;
 
         if Pos('--csv-columns=', lowerArg) = 1 then
         begin
-            eqPos := Pos('=', arg);
-            valueText := LowerCase(Trim(Copy(arg, eqPos + 1, MaxInt)));
-            if (valueText <> 'true') and (valueText <> 'false') then
-            begin
-                aErrorMessage := 'Invalid --csv-columns value "' +
-                    valueText + '" (expected true or false).';
-                Exit;
-            end;
-
-            aCsvColumns := valueText = 'true';
-            Inc(i);
-            Continue;
+            aErrorMessage := '--csv-columns is no longer supported.';
+            Exit;
         end;
 
         if lowerArg = '--full-scan' then
@@ -1078,7 +1044,7 @@ end;
 function parseModeArgs(out aUseEeg: Boolean; out aEegPort: AnsiString;
     out aUseEcg: Boolean; out aEcgFilter: string;
     out aLogTarget: string; out aLogFormat: TLogOutputFormat;
-    out aCsvColumns: Boolean; out aBreathEnabled: Boolean;
+    out aBreathEnabled: Boolean;
     out aBreathOnlyOutput: Boolean; out aBreathMinDelta: Double;
     out aBreathMaxRr: Double; out aEegStaleSec: Integer;
     out aFullScan: Boolean): Boolean;
@@ -1095,7 +1061,7 @@ begin
 
     Result := parseModeArgsCore(args, True, nil,
         aUseEeg, aEegPort, aUseEcg, aEcgFilter,
-        aLogTarget, aLogFormat, aCsvColumns,
+        aLogTarget, aLogFormat,
         aBreathEnabled, aBreathOnlyOutput,
         aBreathMinDelta, aBreathMaxRr, aEegStaleSec, aFullScan,
         parseError);
@@ -1146,46 +1112,21 @@ begin
     end;
 end;
 
-{*******************************************************************************
-* parseCsvColumnsArg
-*******************************************************************************}
-function parseCsvColumnsArg(out aCsvColumns: Boolean): Boolean;
+function hasCsvColumnsArg(): Boolean;
 var
     i: Integer;
     arg: string;
-    valueText: string;
 begin
     Result := False;
-    aCsvColumns := False;
 
-    i := 1;
-    while i <= ParamCount do
+    for i := 1 to ParamCount do
     begin
-        arg := LowerCase(ParamStr(i));
-
-        if arg = '--csv-columns' then
+        arg := LowerCase(Trim(ParamStr(i)));
+        if (arg = '--csv-columns') or (Pos('--csv-columns=', arg) = 1) then
         begin
-            if (i < ParamCount) and
-                ((LowerCase(ParamStr(i + 1)) = 'true') or
-                (LowerCase(ParamStr(i + 1)) = 'false')) then
-                aCsvColumns := LowerCase(ParamStr(i + 1)) = 'true'
-            else
-                aCsvColumns := True;
             Result := True;
             Exit;
         end;
-
-        if Pos('--csv-columns=', arg) = 1 then
-        begin
-            valueText := LowerCase(Trim(Copy(ParamStr(i), Pos('=', ParamStr(i)) + 1, MaxInt)));
-            if (valueText <> 'true') and (valueText <> 'false') then
-                raise Exception.Create('Invalid --csv-columns value: ' + valueText + ' (expected true or false)');
-            aCsvColumns := valueText = 'true';
-            Result := True;
-            Exit;
-        end;
-
-        Inc(i);
     end;
 end;
 
@@ -1379,7 +1320,7 @@ end;
 function TStdioCommandLoop.parseModeArgsFromList(out aUseEeg: Boolean;
     out aEegPort: AnsiString; out aUseEcg: Boolean;
     out aEcgFilter: string; out aLogTarget: string;
-    out aLogFormat: TLogOutputFormat; out aCsvColumns: Boolean;
+    out aLogFormat: TLogOutputFormat;
     out aBreathEnabled: Boolean; out aBreathOnlyOutput: Boolean;
     out aBreathMinDelta: Double; out aBreathMaxRr: Double;
     out aEegStaleSec: Integer;
@@ -1389,7 +1330,7 @@ var
 begin
     Result := parseModeArgsCore(Fparams, False, @reportUnknownStdioArg,
         aUseEeg, aEegPort, aUseEcg, aEcgFilter,
-        aLogTarget, aLogFormat, aCsvColumns,
+        aLogTarget, aLogFormat,
         aBreathEnabled, aBreathOnlyOutput,
         aBreathMinDelta, aBreathMaxRr, aEegStaleSec, aFullScan,
         parseError);
@@ -1603,7 +1544,6 @@ var
     eegStaleSec: Integer;
     logTarget: string;
     logFormat: TLogOutputFormat;
-    csvColumns: Boolean;
     breathEnabled: Boolean;
     breathOnlyOutput: Boolean;
     breathMinDelta: Double;
@@ -1613,7 +1553,7 @@ var
     fullScan: Boolean;
 begin
     if not parseModeArgsFromList(useEeg, eegPort, useEcg, ecgFilter,
-        logTarget, logFormat, csvColumns, breathEnabled,
+        logTarget, logFormat, breathEnabled,
         breathOnlyOutput, breathMinDelta, breathMaxRr, eegStaleSec,
         fullScan) then
     begin
@@ -1622,7 +1562,7 @@ begin
     end;
 
     if logTarget <> '' then
-        Flogger := TLogCore.Create(logTarget, logFormat, csvColumns);
+        Flogger := TLogCore.Create(logTarget, logFormat);
 
     if useEeg then
     begin
@@ -2157,7 +2097,6 @@ var
     useEcg: Boolean;
     logTarget: string;
     logFormat: TLogOutputFormat;
-    csvColumns: Boolean;
     breathEnabled: Boolean;
     eegStaleSec: Integer;
     breathMaxRr: Double;
@@ -2167,8 +2106,6 @@ var
     fullScan: Boolean;
     ecgFilter: string;
     logFormatSpecified: Boolean;
-    listCsvColumns: Boolean;
-    listCsvSpecified: Boolean;
 begin
     eegApp := nil;
     ecgApp := nil;
@@ -2221,12 +2158,11 @@ begin
                 logTarget := '';
                 logFormat := LOG_FORMAT_PLAIN;
                 logFormatSpecified := False;
-                listCsvColumns := False;
-                listCsvSpecified := False;
                 try
                     TLogCore.parseLogArg(logTarget);
                     logFormatSpecified := TLogCore.parseLogFormatArg(logFormat);
-                    listCsvSpecified := parseCsvColumnsArg(listCsvColumns);
+                    if hasCsvColumnsArg() then
+                        raise Exception.Create('--csv-columns is no longer supported.');
                 except
                     on E: Exception do
                     begin
@@ -2241,14 +2177,13 @@ begin
                     logTarget := '-';
 
                 if logTarget <> '' then
-                    logger := TLogCore.Create(logTarget, logFormat,
-                        listCsvSpecified and listCsvColumns);
+                    logger := TLogCore.Create(logTarget, logFormat);
 
                 printListDevices(logger);
                 ExitCode := 0;
             end
             else if not parseModeArgs(useEeg, eegPort, useEcg, ecgFilter,
-                logTarget, logFormat, csvColumns, breathEnabled,
+                logTarget, logFormat, breathEnabled,
                 breathOnlyOutput, breathMinDelta, breathMaxRr, eegStaleSec,
                 fullScan) then
             begin
@@ -2258,7 +2193,7 @@ begin
             else
             begin
                 if logTarget <> '' then
-                    logger := TLogCore.Create(logTarget, logFormat, csvColumns);
+                    logger := TLogCore.Create(logTarget, logFormat);
 
                 if useEeg then
                 begin

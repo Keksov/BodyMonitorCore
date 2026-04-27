@@ -161,6 +161,9 @@ export class ProcessManager {
   private accumulatedDevices: DeviceInfo[] = []
   private stdioState: StdioSessionState = "idle"
   private pendingListDevicesAfterStop = false
+  private pendingListDevicesAfterRestart = false
+  private serverKeepAliveSec = DEFAULT_SERVER_KEEP_ALIVE_SEC
+  private serverInitBle = true
 
   public constructor(aWorkspaceRoot: string) {
     const { bodyMonitorCwd, bodyMonitorExePath } = resolveBodyMonitorExecutablePath(aWorkspaceRoot)
@@ -188,6 +191,9 @@ export class ProcessManager {
     if (this.childProcess === null || this.activeRunId === null) {
       return false
     }
+
+    this.pendingListDevicesAfterStop = false
+    this.pendingListDevicesAfterRestart = false
 
     const child = this.childProcess
     const runId = this.activeRunId
@@ -233,6 +239,8 @@ export class ProcessManager {
     this.accumulatedDevices = []
     this.activeRunId = runId
     this.activeParams = [...params]
+    this.serverKeepAliveSec = aKeepAliveSec
+    this.serverInitBle = aInitBle
     this.setState("starting")
 
     let child: ChildProcess
@@ -318,23 +326,28 @@ export class ProcessManager {
 
   public sendStdioQuit(): void {
     this.pendingListDevicesAfterStop = false
+    this.pendingListDevicesAfterRestart = false
     this.sendStdinCommand({ cmd: "quit" })
   }
 
   public sendServerListDevices(): void {
     if (this.stdioState !== "idle") {
-      this.queueListDevicesAfterStop()
+      this.queueListDevicesAfterRestart()
       return
     }
 
     this.dispatchServerListDevices()
   }
 
-  private queueListDevicesAfterStop(): void {
-    this.pendingListDevicesAfterStop = true
-    if (this.stdioState !== "stopping") {
-      this.sendStdioStop()
+  private queueListDevicesAfterRestart(): void {
+    this.pendingListDevicesAfterStop = false
+    if (this.pendingListDevicesAfterRestart) {
+      return
     }
+
+    this.pendingListDevicesAfterRestart = true
+    this.stdioState = "stopping"
+    this.sendStdinCommand({ cmd: "quit" })
   }
 
   private dispatchServerListDevices(): void {
@@ -350,6 +363,30 @@ export class ProcessManager {
 
   private sendServerPing(): void {
     this.sendStdinCommand({ cmd: "ping" })
+  }
+
+  private handleServerReady(): void {
+    this.callbacks?.onStdioReady?.()
+
+    if (!this.pendingListDevicesAfterRestart) {
+      return
+    }
+
+    this.pendingListDevicesAfterRestart = false
+    this.dispatchServerListDevices()
+  }
+
+  private async restartServerForPendingListDevices(aCallbacks: ProcessManagerCallbacks): Promise<void> {
+    try {
+      await this.startServer(aCallbacks, this.serverKeepAliveSec, this.serverInitBle)
+    } catch (error) {
+      this.pendingListDevicesAfterRestart = false
+
+      const message = error instanceof Error
+        ? `Failed to restart BodyMonitor for list_devices: ${error.message}`
+        : "Failed to restart BodyMonitor for list_devices"
+      aCallbacks.onError?.(message)
+    }
   }
 
   private setState(aState: BodyMonitorState): void {
@@ -392,8 +429,8 @@ export class ProcessManager {
           }
 
           if (ack.cmd === "list_devices" && !ack.ok && ack.error === STOP_ACTIVE_WORKERS_ERROR) {
-            // The backend still has active workers although our local stdioState drifted to idle.
-            this.queueListDevicesAfterStop()
+            // The backend still has active workers although our local state drifted.
+            this.queueListDevicesAfterRestart()
             return
           }
 
@@ -409,12 +446,12 @@ export class ProcessManager {
         }
 
         if (isStdioReadyLine(parsedJson)) {
-          this.callbacks?.onStdioReady?.()
+          this.handleServerReady()
           return
         }
 
         if (isServerReadyLine(parsedJson)) {
-          this.callbacks?.onStdioReady?.()
+          this.handleServerReady()
           return
         }
       }
@@ -454,9 +491,16 @@ export class ProcessManager {
       return
     }
 
+    const shouldRestartForPendingListDevices = this.pendingListDevicesAfterRestart
+    const callbacks = this.callbacks
+
     this.callbacks?.onExit?.(aRunId, exitCode)
     this.resetActiveProcess(aRunId)
     this.setState("idle")
+
+    if (shouldRestartForPendingListDevices && callbacks !== null) {
+      void this.restartServerForPendingListDevices(callbacks)
+    }
   }
 
   private resetActiveProcess(aRunId: string): void {

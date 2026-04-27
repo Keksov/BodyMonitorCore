@@ -1,34 +1,100 @@
 <template>
   <div class="device-list">
     <div class="device-list__scroll">
-      <template v-if="visibleDevices.length > 0">
-        <q-list separator>
-          <q-item v-for="d in visibleDevices" :key="d.mac">
-            <q-item-section>
-              <q-item-label class="device-list__identity row items-center no-wrap">
-                <code class="text-grey-6">{{ d.mac }}</code>
-                <span>{{ d.name || '(no name)' }}</span>
-                <span v-if="showOfflineStatus(d)" class="device-list__offline text-caption text-grey-5">
-                  {{ $t('deviceControl.offline') }}
-                </span>
-              </q-item-label>
+      <template v-if="hasVisibleDevices">
+        <section class="device-list__section">
+          <div class="device-list__section-header device-list__section-header--split">
+            <div class="device-list__section-copy">
+              <div class="text-subtitle2">{{ $t('deviceControl.selectedDevicesTitle') }}</div>
+              <div class="text-caption text-grey-5">
+                {{ $t('deviceControl.selectedDevicesHint') }}
+              </div>
+            </div>
 
-              <div
-                v-if="device.browsing ? d.capabilities.length > 0 : selectedCaps(d).length > 0"
-                class="q-my-xs row q-gutter-xs"
-              >
-                <template v-if="device.browsing">
+            <div class="device-list__header-actions">
+              <template v-if="session.isConnecting">
+                <q-btn
+                  color="warning"
+                  disable
+                  class="device-list__action-button"
+                >
+                  <q-spinner-hourglass size="xs" class="q-mr-sm" />
+                  {{ $t('deviceControl.connecting') }}
+                </q-btn>
+              </template>
+              <q-btn
+                v-else-if="showStopButton"
+                color="negative"
+                :label="$t('deviceControl.stopButton')"
+                :disable="!session.canStop"
+                class="device-list__action-button"
+                @click="onStop"
+              />
+              <q-btn
+                v-else
+                color="secondary"
+                :label="$t('deviceControl.connectButton')"
+                :disable="isConnectDisabled"
+                class="device-list__action-button"
+                @click="onConnect"
+              />
+            </div>
+          </div>
+
+          <q-list v-if="topListDevices.length > 0" separator>
+            <q-item v-for="d in topListDevices" :key="`selected:${d.mac}`">
+              <q-item-section>
+                <div class="device-list__card-header row items-start justify-between no-wrap">
+                  <q-item-label class="device-list__identity row items-center no-wrap">
+                    <code class="text-grey-6">{{ d.mac }}</code>
+                    <span>{{ d.name || '(no name)' }}</span>
+                    <span v-if="showInactiveStatus(d)" class="device-list__status device-list__status--inactive text-caption">
+                      {{ $t('deviceControl.inactive') }}
+                    </span>
+                    <span v-else-if="showOfflineStatus(d)" class="device-list__status device-list__status--offline text-caption">
+                      {{ $t('deviceControl.offline') }}
+                    </span>
+                  </q-item-label>
+
+                  <div class="device-list__card-actions q-ml-md">
+                    <q-btn
+                      flat
+                      dense
+                      :color="showInactiveStatus(d) ? 'positive' : 'warning'"
+                      :icon="showInactiveStatus(d) ? 'play_arrow' : 'pause_circle'"
+                      :label="showInactiveStatus(d) ? $t('deviceControl.activateButton') : $t('deviceControl.inactiveButton')"
+                      class="device-list__toggle-button"
+                      :disable="showInactiveStatus(d) && !device.isMarkedDeviceFound(d.mac)"
+                      @click="onToggleDeviceInactive(d.mac, !showInactiveStatus(d))"
+                    />
+
+                    <q-btn
+                      flat
+                      dense
+                      color="negative"
+                      icon="delete"
+                      :label="$t('deviceControl.removeButton')"
+                      class="device-list__remove-button"
+                      @click="onRemoveMarkedDevice(d.mac)"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  v-if="isTopListExpanded(d) && d.capabilities.length > 0"
+                  class="q-my-xs row q-gutter-xs"
+                >
                   <div
                     v-for="cap in d.capabilities"
                     :key="cap"
                     class="cap-chip row inline items-center no-wrap cursor-pointer"
-                    @click="device.selectDevice(cap, d.mac)"
+                    @click="onCapabilitySelected(cap, d)"
                   >
                     <q-radio
                       dense
                       :model-value="device.getSelectedMac(cap)"
                       :val="d.mac"
-                      @update:model-value="() => device.selectDevice(cap, d.mac)"
+                      @update:model-value="() => onCapabilitySelected(cap, d)"
                       class="q-mr-xs"
                     />
                     <q-icon
@@ -39,29 +105,46 @@
                     />
                     <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
                   </div>
-                </template>
+                </div>
 
-                <template v-else>
-                  <div
-                    v-for="cap in selectedCaps(d)"
-                    :key="cap"
-                    class="cap-chip row inline items-center no-wrap"
-                  >
-                    <q-icon
-                      :name="meta(cap).icon"
-                      :color="meta(cap).color"
-                      size="xs"
-                      class="q-mr-xs"
-                    />
-                    <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
+                <div
+                  v-else-if="d.capabilities.length > 0"
+                  class="device-list__compact-row q-my-xs"
+                >
+                  <div class="device-list__compact-badges row q-gutter-xs">
+                    <div
+                      v-for="cap in d.capabilities"
+                      :key="cap"
+                      class="device-list__capability-badge row inline items-center no-wrap"
+                    >
+                      <q-icon
+                        :name="meta(cap).icon"
+                        :color="meta(cap).color"
+                        size="xs"
+                        class="q-mr-xs"
+                      />
+                      <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
+                    </div>
                   </div>
-                </template>
-              </div>
 
-              <div
-                v-if="showBreathSettings(d)"
-                class="breath-settings q-mt-sm q-pa-sm"
-              >
+                  <div class="device-list__compact-actions row q-gutter-xs">
+                    <q-btn
+                      v-for="cap in d.capabilities"
+                      :key="`${d.mac}:${cap}`"
+                      dense
+                      flat
+                      color="secondary"
+                      icon="tune"
+                      :label="$t('deviceControl.selectCapabilityButton', { capability: $t(`capability.${cap}`) })"
+                      @click="onCapabilitySelected(cap, d)"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  v-if="showBreathSettings(d)"
+                  class="breath-settings q-mt-sm q-pa-sm"
+                >
                 <div class="breath-settings__layout">
                   <div class="breath-settings__controls">
                     <q-toggle
@@ -166,43 +249,106 @@
                 </div>
               </div>
 
-              <div v-if="selectedCaps(d).length > 0" class="device-list__connect-timeout q-mt-sm">
-                <q-input
-                  type="number"
-                  dense
-                  outlined
-                  hide-bottom-space
-                  min="1"
-                  :model-value="device.getConnectTimeoutSec(d.mac)"
-                  :label="$t('deviceControl.connectTimeoutSec')"
-                  @update:model-value="(value) => updateConnectTimeout(d.mac, value)"
-                />
+                <div v-if="selectedCaps(d).length > 0" class="device-list__connect-timeout q-mt-sm">
+                  <q-input
+                    type="number"
+                    dense
+                    outlined
+                    hide-bottom-space
+                    min="1"
+                    :model-value="device.getConnectTimeoutSec(d.mac)"
+                    :label="$t('deviceControl.connectTimeoutSec')"
+                    @update:model-value="(value) => updateConnectTimeout(d.mac, value)"
+                  />
 
-                <q-input
-                  v-if="showEegStaleThreshold(d)"
-                  type="number"
-                  dense
-                  outlined
-                  hide-bottom-space
-                  min="1"
-                  class="q-mt-sm"
-                  :model-value="device.getEegStaleSec(d.mac)"
-                  :label="$t('deviceControl.eegStaleSec')"
-                  @update:model-value="(value) => updateEegStaleThreshold(d.mac, value)"
-                />
-              </div>
+                  <q-input
+                    v-if="showEegStaleThreshold(d)"
+                    type="number"
+                    dense
+                    outlined
+                    hide-bottom-space
+                    min="1"
+                    class="q-mt-sm"
+                    :model-value="device.getEegStaleSec(d.mac)"
+                    :label="$t('deviceControl.eegStaleSec')"
+                    @update:model-value="(value) => updateEegStaleThreshold(d.mac, value)"
+                  />
+                </div>
 
-              <q-item-label
-                v-if="device.browsing"
-                caption
-                style="font-size: 0.75rem"
-                class="text-grey-6"
-              >
-                {{ d.type }}<template v-if="d.comPort"> · {{ d.comPort }}</template>
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-        </q-list>
+                <q-item-label
+                  caption
+                  style="font-size: 0.75rem"
+                  class="text-grey-6"
+                >
+                  {{ d.type }}<template v-if="d.comPort"> · {{ d.comPort }}</template>
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+
+          <div v-else class="device-list__empty-state text-grey q-pa-sm">
+            {{ $t('deviceControl.selectedDevicesEmpty') }}
+          </div>
+        </section>
+
+        <section v-if="scanDevices.length > 0" class="device-list__section">
+          <div class="device-list__section-header">
+            <div class="text-subtitle2">{{ $t('deviceControl.availableDevicesTitle') }}</div>
+            <div class="text-caption text-grey-5">
+              {{ $t('deviceControl.availableDevicesHint') }}
+            </div>
+          </div>
+
+          <q-list separator>
+            <q-item v-for="d in scanDevices" :key="`scan:${d.mac}`">
+              <q-item-section>
+                <div class="device-list__card-header row items-start justify-between no-wrap">
+                  <q-item-label class="device-list__identity row items-center no-wrap">
+                    <code class="text-grey-6">{{ d.mac }}</code>
+                    <span>{{ d.name || '(no name)' }}</span>
+                  </q-item-label>
+
+                  <q-btn
+                    flat
+                    dense
+                    color="secondary"
+                    icon="playlist_add"
+                    :label="$t('deviceControl.addButton')"
+                    class="device-list__add-button q-ml-md"
+                    @click="onRememberFoundDevice(d)"
+                  />
+                </div>
+
+                <div
+                  v-if="d.capabilities.length > 0"
+                  class="q-my-xs row q-gutter-xs"
+                >
+                  <div
+                    v-for="cap in d.capabilities"
+                    :key="cap"
+                    class="device-list__capability-badge row inline items-center no-wrap"
+                  >
+                    <q-icon
+                      :name="meta(cap).icon"
+                      :color="meta(cap).color"
+                      size="xs"
+                      class="q-mr-xs"
+                    />
+                    <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
+                  </div>
+                </div>
+
+                <q-item-label
+                  caption
+                  style="font-size: 0.75rem"
+                  class="text-grey-6"
+                >
+                  {{ d.type }}<template v-if="d.comPort"> · {{ d.comPort }}</template>
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </section>
       </template>
 
       <div v-else-if="showNoDevicesMessage" class="text-grey q-pa-sm">
@@ -211,35 +357,6 @@
       <div v-else-if="showPressScanMessage" class="text-grey q-pa-sm">
         {{ $t('deviceControl.pressScan') }}
       </div>
-    </div>
-
-    <div v-if="showActionFooter" class="device-list__footer">
-      <template v-if="session.isConnecting">
-        <q-btn
-          color="warning"
-          disable
-          class="device-list__footer-button"
-        >
-          <q-spinner-hourglass size="xs" class="q-mr-sm" />
-          {{ $t('deviceControl.connecting') }}
-        </q-btn>
-      </template>
-      <q-btn
-        v-else-if="showStopButton"
-        color="negative"
-        :label="$t('deviceControl.stopButton')"
-        :disable="!session.canStop"
-        class="device-list__footer-button"
-        @click="onStop"
-      />
-      <q-btn
-        v-else
-        color="secondary"
-        :label="$t('deviceControl.connectButton')"
-        :disable="isConnectDisabled"
-        class="device-list__footer-button"
-        @click="onConnect"
-      />
     </div>
   </div>
 </template>
@@ -264,29 +381,20 @@ const session = useSessionStore()
 const { send } = useWs()
 const router = useRouter()
 
-const visibleDevices = computed(() => device.browsing ? device.devices : device.selectedDeviceInfos)
-const isConnectDisabled = computed(() => !session.canStart || device.selectedDeviceInfos.length === 0)
+const topListDevices = computed<readonly DeviceInfo[]>(() => device.topListDevices)
+const scanDevices = computed<readonly DeviceInfo[]>(() => device.scanDevices)
+const hasVisibleDevices = computed(() => topListDevices.value.length > 0 || scanDevices.value.length > 0)
+const isConnectDisabled = computed(() => !session.canStart || Object.keys(device.connectTargets).length === 0)
 const showStopButton = computed(() => session.bodyMonitorState === 'running' && !session.isConnecting)
-const showActionFooter = computed(() => {
-  if (device.browsing) {
-    return device.hasDevices && session.scanDone
-  }
-
-  return device.selectedDeviceInfos.length > 0
-})
 const showNoDevicesMessage = computed(() => {
-  return device.browsing && session.scanDone && visibleDevices.value.length === 0
+  return session.scanDone && topListDevices.value.length === 0 && scanDevices.value.length === 0
 })
 const showPressScanMessage = computed(() => {
-  if (visibleDevices.value.length > 0) {
+  if (hasVisibleDevices.value) {
     return false
   }
 
-  if (device.browsing) {
-    return !session.isScanning && !session.scanDone
-  }
-
-  return true
+  return !session.isScanning && !session.scanDone
 })
 
 const fallbackMeta = { icon: 'device_unknown', color: 'grey' }
@@ -314,12 +422,36 @@ function selectedCaps(d: DeviceInfo): string[] {
   )
 }
 
+function isTopListExpanded(d: DeviceInfo): boolean {
+  return selectedCaps(d).length > 0
+}
+
 function isSelectedCapabilityOffline(capability: string): boolean {
   return session.isDeviceOffline(device.getSelectedMac(capability))
 }
 
+function showInactiveStatus(deviceInfo: DeviceInfo): boolean {
+  return device.isDeviceInactive(deviceInfo.mac)
+}
+
 function showOfflineStatus(deviceInfo: DeviceInfo): boolean {
-  return selectedCaps(deviceInfo).some(isSelectedCapabilityOffline)
+  return !device.isDeviceInactive(deviceInfo.mac) && selectedCaps(deviceInfo).some(isSelectedCapabilityOffline)
+}
+
+function onCapabilitySelected(capability: string, deviceInfo: DeviceInfo) {
+  device.setMarkedDeviceCapabilityActive(capability, deviceInfo.mac, true)
+}
+
+function onRememberFoundDevice(deviceInfo: DeviceInfo) {
+  device.rememberFoundDevice(deviceInfo)
+}
+
+function onToggleDeviceInactive(mac: string, inactive: boolean) {
+  device.setDeviceInactive(mac, inactive)
+}
+
+function onRemoveMarkedDevice(mac: string) {
+  device.removeMarkedDevice(mac)
 }
 
 function parseNumericInput(value: NumericInputValue): number | null {
@@ -423,12 +555,17 @@ function applyRuntimeEegParam(mac: string, key: string, value: string) {
 
 function onConnect() {
   const params: string[] = []
+
+  if (Object.keys(device.connectTargets).length === 0) {
+    return
+  }
+
   for (const [cap, paramName] of Object.entries(capabilityCliParam)) {
-    const mac = device.getSelectedMac(cap)
+    const mac = device.getConnectableMac(cap)
     if (mac) params.push(`${paramName}=${mac}`)
   }
 
-  const ecgMac = device.getSelectedMac('ecg')
+  const ecgMac = device.getConnectableMac('ecg')
   if (ecgMac !== null) {
     const breathSettings = device.getBreathSettings(ecgMac)
     if (breathSettings.enabled) {
@@ -442,7 +579,7 @@ function onConnect() {
     }
   }
 
-  const eegMac = device.getSelectedMac('eeg')
+  const eegMac = device.getConnectableMac('eeg')
   if (eegMac !== null) {
     params.push(`--eeg-stale-sec=${device.getEegStaleSec(eegMac)}`)
   }
@@ -484,24 +621,86 @@ watch(() => session.connectReadyToken, (token) => {
   gap: 8px;
 }
 
-.device-list__offline {
+.device-list__section + .device-list__section {
+  margin-top: 20px;
+}
+
+.device-list__section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.device-list__section-header--split {
+  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+}
+
+.device-list__section-copy {
+  min-width: 0;
+}
+
+.device-list__header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.device-list__card-header {
+  gap: 12px;
+}
+
+.device-list__status {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  line-height: 1;
   margin-left: auto;
+  padding: 4px 8px;
+}
+
+.device-list__status--inactive {
+  background: rgba(234, 179, 8, 0.12);
+  color: rgba(253, 224, 71, 0.95);
+}
+
+.device-list__status--offline {
+  background: rgba(100, 116, 139, 0.16);
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.device-list__remove-button {
+  align-self: flex-start;
+}
+
+.device-list__toggle-button,
+.device-list__add-button {
+  align-self: flex-start;
+}
+
+.device-list__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.device-list__empty-state {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
 }
 
 .device-list__connect-timeout {
   max-width: 240px;
 }
 
-.device-list__footer {
-  backdrop-filter: blur(10px);
-  background: rgba(15, 23, 42, 0.92);
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
-  flex: 0 0 auto;
-  margin-top: 12px;
-  padding-top: 12px;
-}
-
-.device-list__footer-button {
+.device-list__action-button {
   min-width: 180px;
 }
 
@@ -509,6 +708,27 @@ watch(() => session.connectReadyToken, (token) => {
   background: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 2px 8px 2px 2px;
+}
+
+.device-list__capability-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.device-list__compact-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  justify-content: space-between;
+}
+
+.device-list__compact-badges,
+.device-list__compact-actions {
+  align-items: center;
+  min-width: 0;
 }
 
 .breath-settings {
@@ -630,8 +850,12 @@ watch(() => session.connectReadyToken, (token) => {
 }
 
 @media (max-width: 1024px) {
-  .device-list__footer-button {
+  .device-list__action-button {
     min-width: 0;
+    width: 100%;
+  }
+
+  .device-list__header-actions {
     width: 100%;
   }
 
@@ -653,8 +877,18 @@ watch(() => session.connectReadyToken, (token) => {
 }
 
 @media (max-width: 768px) {
-  .device-list__footer {
-    padding-top: 10px;
+  .device-list__card-header {
+    flex-direction: column;
+  }
+
+  .device-list__card-actions,
+  .device-list__header-actions {
+    justify-content: flex-start;
+  }
+
+  .device-list__compact-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .breath-settings__layout {

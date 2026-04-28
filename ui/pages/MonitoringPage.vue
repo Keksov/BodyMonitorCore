@@ -198,10 +198,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import SessionControls from '../components/SessionControls.vue'
-import { useReplayStore } from 'stores/replay'
-import { useSessionStore } from 'stores/session'
+import { useReplay } from '../composables/use-replay'
+import { useSessionStore } from '../stores/session'
 import { usePreferencesStore } from '../stores/preferences'
-import { hasLogChartData } from 'src/utils/log-chart'
+import { hasLogChartData } from '../../../SharedPasCore/ts/log-chart'
 import { useI18n } from 'vue-i18n'
 import type { EegDisplayMode } from '../stores/preferences'
 
@@ -214,7 +214,7 @@ const EegBandBarChart = defineAsyncComponent(() => import('../components/EegBand
 const session = useSessionStore()
 const preferences = usePreferencesStore()
 const { t } = useI18n()
-const replay = useReplayStore()
+const replay = useReplay()
 const viewportPreset = ref<ChartViewportPreset>(replay.isReplayMode ? 'fit' : 'recent')
 const viewportToken = ref(0)
 

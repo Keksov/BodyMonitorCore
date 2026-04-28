@@ -10,8 +10,8 @@ import type {
   BodyMonitorErrorEvent,
   BodyMonitorStdioAckEvent
 } from '@protocol'
-import { useDeviceStore } from 'stores/device'
-import { appendParsedOutputToLogChart, createEmptyChartSnapshot } from 'src/utils/log-chart'
+import { useDeviceStore } from './device'
+import { appendParsedOutputToLogChart, createEmptyChartSnapshot } from '../../../SharedPasCore/ts/log-chart'
 
 const RAW_LINES_MAX = 1000
 

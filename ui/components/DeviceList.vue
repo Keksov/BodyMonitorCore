@@ -3,41 +3,10 @@
     <div class="device-list__scroll">
       <template v-if="hasVisibleDevices">
         <section class="device-list__section">
-          <div class="device-list__section-header device-list__section-header--split">
-            <div class="device-list__section-copy">
-              <div class="text-subtitle2">{{ $t('deviceControl.selectedDevicesTitle') }}</div>
-              <div class="text-caption text-grey-5">
-                {{ $t('deviceControl.selectedDevicesHint') }}
-              </div>
-            </div>
-
-            <div class="device-list__header-actions">
-              <template v-if="session.isConnecting">
-                <q-btn
-                  color="warning"
-                  disable
-                  class="device-list__action-button"
-                >
-                  <q-spinner-hourglass size="xs" class="q-mr-sm" />
-                  {{ $t('deviceControl.connecting') }}
-                </q-btn>
-              </template>
-              <q-btn
-                v-else-if="showStopButton"
-                color="negative"
-                :label="$t('deviceControl.stopButton')"
-                :disable="!session.canStop"
-                class="device-list__action-button"
-                @click="onStop"
-              />
-              <q-btn
-                v-else
-                color="secondary"
-                :label="$t('deviceControl.connectButton')"
-                :disable="isConnectDisabled"
-                class="device-list__action-button"
-                @click="onConnect"
-              />
+          <div class="device-list__section-header">
+            <div class="text-subtitle2">{{ $t('deviceControl.selectedDevicesTitle') }}</div>
+            <div class="text-caption text-grey-5">
+              {{ $t('deviceControl.selectedDevicesHint') }}
             </div>
           </div>
 
@@ -45,8 +14,33 @@
             <q-item v-for="d in topListDevices" :key="`selected:${d.mac}`">
               <q-item-section>
                 <div class="device-list__card-header row items-start justify-between no-wrap">
-                  <q-item-label class="device-list__identity row items-center no-wrap">
+                  <q-item-label class="device-list__identity device-list__identity--selected row items-center">
                     <code class="text-grey-6">{{ d.mac }}</code>
+
+                    <div v-if="d.capabilities.length > 0" class="device-list__identity-capabilities row items-center">
+                      <div
+                        v-for="cap in d.capabilities"
+                        :key="cap"
+                        class="cap-chip cap-chip--identity row inline items-center no-wrap cursor-pointer"
+                        @click="onCapabilitySelected(cap, d)"
+                      >
+                        <q-radio
+                          dense
+                          :model-value="device.getSelectedMac(cap)"
+                          :val="d.mac"
+                          @update:model-value="() => onCapabilitySelected(cap, d)"
+                          class="q-mr-xs"
+                        />
+                        <q-icon
+                          :name="meta(cap).icon"
+                          :color="meta(cap).color"
+                          size="xs"
+                          class="q-mr-xs"
+                        />
+                        <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
+                      </div>
+                    </div>
+
                     <span>{{ d.name || '(no name)' }}</span>
                     <span v-if="showInactiveStatus(d)" class="device-list__status device-list__status--inactive text-caption">
                       {{ $t('deviceControl.inactive') }}
@@ -80,66 +74,13 @@
                   </div>
                 </div>
 
-                <div
-                  v-if="isTopListExpanded(d) && d.capabilities.length > 0"
-                  class="q-my-xs row q-gutter-xs"
+                <q-item-label
+                  caption
+                  style="font-size: 0.75rem"
+                  class="device-list__device-meta text-grey-6 q-mt-xs"
                 >
-                  <div
-                    v-for="cap in d.capabilities"
-                    :key="cap"
-                    class="cap-chip row inline items-center no-wrap cursor-pointer"
-                    @click="onCapabilitySelected(cap, d)"
-                  >
-                    <q-radio
-                      dense
-                      :model-value="device.getSelectedMac(cap)"
-                      :val="d.mac"
-                      @update:model-value="() => onCapabilitySelected(cap, d)"
-                      class="q-mr-xs"
-                    />
-                    <q-icon
-                      :name="meta(cap).icon"
-                      :color="meta(cap).color"
-                      size="xs"
-                      class="q-mr-xs"
-                    />
-                    <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
-                  </div>
-                </div>
-
-                <div
-                  v-else-if="d.capabilities.length > 0"
-                  class="device-list__compact-row q-my-xs"
-                >
-                  <div class="device-list__compact-badges row q-gutter-xs">
-                    <div
-                      v-for="cap in d.capabilities"
-                      :key="cap"
-                      class="device-list__capability-badge row inline items-center no-wrap"
-                    >
-                      <q-icon
-                        :name="meta(cap).icon"
-                        :color="meta(cap).color"
-                        size="xs"
-                        class="q-mr-xs"
-                      />
-                      <span class="text-caption">{{ $t(`capability.${cap}`) }}</span>
-                    </div>
-                  </div>
-
-                  <div class="device-list__compact-actions row q-gutter-xs">
-                    <q-btn
-                      v-for="cap in d.capabilities"
-                      :key="`${d.mac}:${cap}`"
-                      dense
-                      flat
-                      color="secondary"
-                      icon="tune"
-                      :label="$t('deviceControl.selectCapabilityButton', { capability: $t(`capability.${cap}`) })"
-                      @click="onCapabilitySelected(cap, d)"
-                    />
-                  </div>
-                </div>
+                  {{ d.type }}<template v-if="d.comPort"> · {{ d.comPort }}</template>
+                </q-item-label>
 
                 <div
                   v-if="showBreathSettings(d)"
@@ -167,10 +108,7 @@
                         min="0.1"
                         @update:model-value="(value) => updateBreathMinDelta(d.mac, value)"
                       />
-                      <div class="breath-note breath-note--inline">
-                        <div class="breath-note__title">{{ $t('breath.minDelta') }}</div>
-                        <div class="breath-note__text">{{ $t('breath.minDeltaDescription') }}</div>
-                      </div>
+                      <FieldHelpText :text="$t('breath.minDeltaDescription')" />
                     </div>
                     <div class="breath-settings__field">
                       <q-input
@@ -185,10 +123,7 @@
                         min="301"
                         @update:model-value="(value) => updateBreathMaxRr(d.mac, value)"
                       />
-                      <div class="breath-note breath-note--inline">
-                        <div class="breath-note__title">{{ $t('breath.maxRr') }}</div>
-                        <div class="breath-note__text">{{ $t('breath.maxRrDescription') }}</div>
-                      </div>
+                      <FieldHelpText :text="$t('breath.maxRrDescription')" />
                     </div>
                   </div>
 
@@ -250,44 +185,74 @@
               </div>
 
                 <div v-if="selectedCaps(d).length > 0" class="device-list__connect-timeout q-mt-sm">
-                  <q-input
-                    type="number"
-                    dense
-                    outlined
-                    hide-bottom-space
-                    min="1"
-                    :model-value="device.getConnectTimeoutSec(d.mac)"
-                    :label="$t('deviceControl.connectTimeoutSec')"
-                    @update:model-value="(value) => updateConnectTimeout(d.mac, value)"
-                  />
+                  <div class="device-list__connect-timeout-item">
+                    <q-input
+                      type="number"
+                      dense
+                      outlined
+                      hide-bottom-space
+                      min="1"
+                      :model-value="device.getConnectTimeoutSec(d.mac)"
+                      :label="$t('deviceControl.connectTimeoutSec')"
+                      @update:model-value="(value) => updateConnectTimeout(d.mac, value)"
+                    />
+                    <FieldHelpText :text="$t('deviceControl.connectTimeoutSecDescription')" />
+                  </div>
 
-                  <q-input
-                    v-if="showEegStaleThreshold(d)"
-                    type="number"
-                    dense
-                    outlined
-                    hide-bottom-space
-                    min="1"
-                    class="q-mt-sm"
-                    :model-value="device.getEegStaleSec(d.mac)"
-                    :label="$t('deviceControl.eegStaleSec')"
-                    @update:model-value="(value) => updateEegStaleThreshold(d.mac, value)"
-                  />
+                  <div v-if="showEegStaleThreshold(d)" class="device-list__connect-timeout-item">
+                    <q-input
+                      type="number"
+                      dense
+                      outlined
+                      hide-bottom-space
+                      min="1"
+                      :model-value="device.getEegStaleSec(d.mac)"
+                      :label="$t('deviceControl.eegStaleSec')"
+                      @update:model-value="(value) => updateEegStaleThreshold(d.mac, value)"
+                    />
+                    <FieldHelpText :text="$t('deviceControl.eegStaleSecDescription')" />
+                  </div>
                 </div>
-
-                <q-item-label
-                  caption
-                  style="font-size: 0.75rem"
-                  class="text-grey-6"
-                >
-                  {{ d.type }}<template v-if="d.comPort"> · {{ d.comPort }}</template>
-                </q-item-label>
               </q-item-section>
             </q-item>
           </q-list>
 
           <div v-else class="device-list__empty-state text-grey q-pa-sm">
             {{ $t('deviceControl.selectedDevicesEmpty') }}
+          </div>
+
+          <div class="device-list__footer-block q-mt-md">
+            <div class="device-list__footer-layout">
+              <div class="device-list__footer-action">
+                <template v-if="session.isConnecting">
+                  <q-btn
+                    color="warning"
+                    disable
+                    class="device-list__action-button"
+                  >
+                    <q-spinner-hourglass size="xs" class="q-mr-sm" />
+                    {{ $t('deviceControl.connecting') }}
+                  </q-btn>
+                </template>
+                <q-btn
+                  v-else-if="showStopButton"
+                  color="negative"
+                  :label="$t('deviceControl.stopButton')"
+                  :disable="!session.canStop"
+                  class="device-list__action-button"
+                  @click="onStop"
+                />
+                <q-btn
+                  v-else
+                  color="secondary"
+                  :label="$t('deviceControl.connectButton')"
+                  :disable="isConnectDisabled"
+                  class="device-list__action-button"
+                  @click="onConnect"
+                />
+              </div>
+
+            </div>
           </div>
         </section>
 
@@ -365,15 +330,16 @@
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { DeviceInfo } from '@protocol'
+import FieldHelpText from './FieldHelpText.vue'
 import {
   useDeviceStore,
   capabilityMeta,
   capabilityCliParam,
   DEFAULT_BREATH_MIN_DELTA_MS,
   DEFAULT_BREATH_MAX_RR_MS,
-} from 'stores/device'
-import { useSessionStore } from 'stores/session'
-import { useWs } from 'src/composables/use-ws'
+} from '../stores/device'
+import { useSessionStore } from '../stores/session'
+import { useWs } from '../composables/use-ws'
 import { buildBodyMonitorCommandLine } from '../services/command-line'
 
 const device = useDeviceStore()
@@ -422,9 +388,6 @@ function selectedCaps(d: DeviceInfo): string[] {
   )
 }
 
-function isTopListExpanded(d: DeviceInfo): boolean {
-  return selectedCaps(d).length > 0
-}
 
 function isSelectedCapabilityOffline(capability: string): boolean {
   return session.isDeviceOffline(device.getSelectedMac(capability))
@@ -603,6 +566,7 @@ watch(() => session.connectReadyToken, (token) => {
 
 <style scoped>
 .device-list {
+  --device-list-control-width: clamp(12rem, 24vw, 16.25rem);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -621,6 +585,16 @@ watch(() => session.connectReadyToken, (token) => {
   gap: 8px;
 }
 
+.device-list__identity--selected {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.device-list__identity-capabilities {
+  gap: 8px;
+  min-width: 0;
+}
+
 .device-list__section + .device-list__section {
   margin-top: 20px;
 }
@@ -630,26 +604,6 @@ watch(() => session.connectReadyToken, (token) => {
   flex-direction: column;
   gap: 4px;
   margin-bottom: 8px;
-}
-
-.device-list__section-header--split {
-  align-items: flex-start;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  justify-content: space-between;
-}
-
-.device-list__section-copy {
-  min-width: 0;
-}
-
-.device-list__header-actions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
 }
 
 .device-list__card-header {
@@ -696,18 +650,58 @@ watch(() => session.connectReadyToken, (token) => {
   border-radius: 10px;
 }
 
+.device-list__device-meta {
+  overflow-wrap: anywhere;
+}
+
 .device-list__connect-timeout {
-  max-width: 240px;
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.device-list__connect-timeout-item {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 var(--device-list-control-width);
+  gap: 8px;
+  min-width: min(100%, 12rem);
+  width: min(100%, var(--device-list-control-width));
 }
 
 .device-list__action-button {
   min-width: 180px;
 }
 
+.device-list__footer-block {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.device-list__footer-layout {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+}
+
+.device-list__footer-action {
+  display: flex;
+  flex: 0 0 auto;
+}
+
 .cap-chip {
   background: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 2px 8px 2px 2px;
+}
+
+.cap-chip--identity {
+  margin: 0;
 }
 
 .device-list__capability-badge {
@@ -745,18 +739,20 @@ watch(() => session.connectReadyToken, (token) => {
 }
 
 .breath-settings__controls {
+  align-items: flex-start;
   display: flex;
-  flex: 0 0 260px;
+  flex: 0 1 var(--device-list-control-width);
   flex-direction: column;
   gap: 12px;
-  max-width: 260px;
-  min-width: 220px;
+  max-width: var(--device-list-control-width);
+  min-width: min(100%, 12rem);
 }
 
 .breath-settings__field {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: min(100%, var(--device-list-control-width));
 }
 
 .breath-settings__visual {
@@ -831,10 +827,6 @@ watch(() => session.connectReadyToken, (token) => {
   padding: 10px 12px;
 }
 
-.breath-note--inline {
-  min-width: 0;
-}
-
 .breath-note__title {
   color: rgba(248, 250, 252, 0.94);
   font-size: 0.8rem;
@@ -850,23 +842,14 @@ watch(() => session.connectReadyToken, (token) => {
 }
 
 @media (max-width: 1024px) {
-  .device-list__action-button {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .device-list__header-actions {
-    width: 100%;
-  }
-
   .breath-settings__layout {
     flex-wrap: wrap;
   }
 
   .breath-settings__controls {
-    flex-basis: 260px;
-    max-width: 260px;
-    min-width: 220px;
+    flex-basis: var(--device-list-control-width);
+    max-width: var(--device-list-control-width);
+    min-width: min(100%, 12rem);
   }
 
   .breath-settings__visual,
@@ -881,9 +864,23 @@ watch(() => session.connectReadyToken, (token) => {
     flex-direction: column;
   }
 
-  .device-list__card-actions,
-  .device-list__header-actions {
+  .device-list__card-actions {
     justify-content: flex-start;
+  }
+
+  .device-list__footer-layout {
+    flex-direction: column;
+  }
+
+  .device-list__footer-action {
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .device-list__action-button {
+    min-width: 0;
+    width: 100%;
   }
 
   .device-list__compact-row {
@@ -897,9 +894,9 @@ watch(() => session.connectReadyToken, (token) => {
 
   .breath-settings__controls {
     flex-basis: auto;
-    max-width: none;
-    min-width: 0;
-    width: 100%;
+    max-width: var(--device-list-control-width);
+    min-width: min(100%, 12rem);
+    width: min(100%, var(--device-list-control-width));
   }
 
   .breath-settings__visual,

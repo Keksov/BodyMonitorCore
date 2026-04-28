@@ -1,1 +1,1 @@
-export * from '../../MindWaveCore/server/protocol'
+export * from '../../SharedPasCore/ts/protocol'

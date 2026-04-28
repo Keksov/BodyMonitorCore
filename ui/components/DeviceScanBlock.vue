@@ -34,9 +34,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { copyToClipboard, useQuasar } from 'quasar'
-import { useSessionStore } from 'stores/session'
-import { useDeviceStore } from 'stores/device'
-import { useWs } from 'src/composables/use-ws'
+import { useSessionStore } from '../stores/session'
+import { useDeviceStore } from '../stores/device'
+import { useWs } from '../composables/use-ws'
 
 const { t } = useI18n()
 const $q = useQuasar()

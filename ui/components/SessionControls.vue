@@ -20,9 +20,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useDeviceStore, capabilityMeta, capabilityCliParam } from 'stores/device'
-import { useSessionStore } from 'stores/session'
-import { useReplayStore } from 'stores/replay'
+import { useDeviceStore, capabilityMeta, capabilityCliParam } from '../stores/device'
+import { useSessionStore } from '../stores/session'
+import { useReplay } from '../composables/use-replay'
 
 const props = withDefaults(defineProps<{
   readonly align?: 'start' | 'end'
@@ -32,7 +32,7 @@ const props = withDefaults(defineProps<{
 
 const deviceStore = useDeviceStore()
 const sessionStore = useSessionStore()
-const replayStore = useReplayStore()
+const replayStore = useReplay()
 
 const displayCaps = Object.keys(capabilityCliParam)
 const rowClassNames = computed(() => [

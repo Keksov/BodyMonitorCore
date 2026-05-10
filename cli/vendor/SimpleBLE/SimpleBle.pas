@@ -1,4 +1,4 @@
-unit SimpleBle;
+unit SimpleCBle;
 
 {$mode ObjFPC}{$H+}
 {$macro on}
@@ -7,6 +7,8 @@ unit SimpleBle;
 
   Pascal bindings are Copyright (c) 2022-2023 Erik Lins and released under the MIT License.
     https://github.com/eriklins/Pascal-Bindings-For-SimpleBLE-Library
+
+  Modified for KKMindWave SimpleCBLE v0.12.1 migration.
 
   The SimpleBLE library is Copyright (c) 2021-2022 Kevin Dewald and released under the MIT License.
     https://github.com/OpenBluetoothToolbox/SimpleBLE
@@ -32,7 +34,7 @@ uses
 
 const
   {$IFDEF WINDOWS}
-    SimpleBleExtLibrary = 'simpleble-c.dll';
+    SimpleBleExtLibrary = 'simplecble.dll';
   {$ELSE}
     {$IFDEF DARWIN}
       SimpleBleExtLibrary = 'simpleble-c.dylib';
@@ -391,10 +393,10 @@ procedure SimpleBleUnloadLibrary();
 { functions from SimpleBLE adapter.h }
 
 type
-  TSimpleBleCallbackScanStart = procedure(Adapter: TSimpleBleAdapter; UserData: PPointer);
-  TSimpleBleCallbackScanStop = procedure(Adapter: TSimpleBleAdapter; UserData: PPointer);
-  TSimpleBleCallbackScanUpdated = procedure(Adapter: TSimpleBleAdapter; peripheral: TSimpleBleAdapter; UserData: PPointer);
-  TSimpleBleCallbackScanFound = procedure(Adapter: TSimpleBleAdapter; peripheral: TSimpleBleAdapter; UserData: PPointer);
+  TSimpleBleCallbackScanStart = procedure(Adapter: TSimpleBleAdapter; UserData: Pointer); cdecl;
+  TSimpleBleCallbackScanStop = procedure(Adapter: TSimpleBleAdapter; UserData: Pointer); cdecl;
+  TSimpleBleCallbackScanUpdated = procedure(Adapter: TSimpleBleAdapter; Peripheral: TSimpleBlePeripheral; UserData: Pointer); cdecl;
+  TSimpleBleCallbackScanFound = procedure(Adapter: TSimpleBleAdapter; Peripheral: TSimpleBlePeripheral; UserData: Pointer); cdecl;
 
 var
   SimpleBleAdapterIsBluetoothEnabled : function() : Boolean; cdecl;
@@ -411,19 +413,19 @@ var
   SimpleBleAdapterScanGetResultsHandle : function(Handle: TSimpleBleAdapter; Index: NativeUInt): TSimpleBlePeripheral; cdecl;
   SimpleBleAdapterGetPairedPeripheralsCount : function(Handle: TSimpleBleAdapter): NativeUInt; cdecl;
   SimpleBleAdapterGetPairedPeripheralsHandle : function(Handle: TSimpleBleAdapter; Index: NativeUInt): TSimpleBlePeripheral; cdecl;
-  SimpleBleAdapterSetCallbackOnScanStart : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanStart; UserData: PPointer): TSimpleBleErr;  cdecl;
-  SimpleBleAdapterSetCallbackOnScanStop : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanStop; UserData: PPointer): TSimpleBleErr; cdecl;
-  SimpleBleAdapterSetCallbackOnScanUpdated : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanUpdated; UserData: PPointer): TSimpleBleErr; cdecl;
-  SimpleBleAdapterSetCallbackOnScanFound : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanFound; UserData: PPointer): TSimpleBleErr; cdecl;
+  SimpleBleAdapterSetCallbackOnScanStart : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanStart; UserData: Pointer): TSimpleBleErr;  cdecl;
+  SimpleBleAdapterSetCallbackOnScanStop : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanStop; UserData: Pointer): TSimpleBleErr; cdecl;
+  SimpleBleAdapterSetCallbackOnScanUpdated : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanUpdated; UserData: Pointer): TSimpleBleErr; cdecl;
+  SimpleBleAdapterSetCallbackOnScanFound : function(Handle: TSimpleBleAdapter; Callback: TSimpleBleCallbackScanFound; UserData: Pointer): TSimpleBleErr; cdecl;
 
 
 { functions from SimpleBLE peripheral.h }
 
 type
-  TSimpleBleCallbackOnConnected = procedure(peripheral: TSimpleBlePeripheral; UserData: PPointer);
-  TSimpleBleCallbackOnDisconnected = procedure(peripheral: TSimpleBlePeripheral; UserData: PPointer);
-  TSimpleBleCallbackNotify = procedure(service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt; UserData: PPointer);
-  TSimpleBleCallbackIndicate = procedure(service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt; UserData: PPointer);
+  TSimpleBleCallbackOnConnected = procedure(Peripheral: TSimpleBlePeripheral; UserData: Pointer); cdecl;
+  TSimpleBleCallbackOnDisconnected = procedure(Peripheral: TSimpleBlePeripheral; UserData: Pointer); cdecl;
+  TSimpleBleCallbackNotify = procedure(Peripheral: TSimpleBlePeripheral; Service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt; UserData: Pointer); cdecl;
+  TSimpleBleCallbackIndicate = procedure(Peripheral: TSimpleBlePeripheral; Service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt; UserData: Pointer); cdecl;
 
 var
   SimpleBlePeripheralReleaseHandle : procedure(Handle: TSimpleBlePeripheral); cdecl;
@@ -446,13 +448,13 @@ var
   SimpleBlePeripheralRead : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; var Data: PByte; var DataLength: NativeUInt): TSimpleBleErr; cdecl;
   SimpleBlePeripheralWriteRequest : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt): TSimpleBleErr; cdecl;
   SimpleBlePeripheralWriteCommand : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt): TSimpleBleErr; cdecl;
-  SimpleBlePeripheralNotify : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Callback: TSimpleBleCallbackNotify; UserData: PPointer): TSimpleBleErr; cdecl;
-  SimpleBlePeripheralIndicate : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Callback: TSimpleBleCallbackIndicate; UserData: PPointer): TSimpleBleErr; cdecl;
+  SimpleBlePeripheralNotify : function(Handle: TSimpleBlePeripheral; Service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Callback: TSimpleBleCallbackNotify; UserData: Pointer): TSimpleBleErr; cdecl;
+  SimpleBlePeripheralIndicate : function(Handle: TSimpleBlePeripheral; Service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Callback: TSimpleBleCallbackIndicate; UserData: Pointer): TSimpleBleErr; cdecl;
   SimpleBlePeripheralUnsubscribe : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid):TSimpleBleErr; cdecl;
   SimpleBlePeripheralReadDescriptor : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Descriptor: TSimpleBleUuid; var Data: PByte; var DataLength: NativeUInt): TSimpleBleErr; cdecl;
   SimpleBlePeripheralWriteDescriptor : function(Handle: TSimpleBlePeripheral; service: TSimpleBleUuid; Characteristic: TSimpleBleUuid; Descriptor: TSimpleBleUuid; Data: PByte; DataLength: NativeUInt): TSimpleBleErr; cdecl;
-  SimpleBlePeripheralSetCallbackOnConnected : function(Handle: TSimpleBlePeripheral; Callback: TSimpleBleCallbackOnConnected; UserData: PPointer): TSimpleBleErr; cdecl;
-  SimpleBlePeripheralSetCallbackOnDisconnected : function(Handle: TSimpleBlePeripheral; Callback: TSimpleBleCallbackOnDisconnected; UserData: PPointer): TSimpleBleErr; cdecl;
+  SimpleBlePeripheralSetCallbackOnConnected : function(Handle: TSimpleBlePeripheral; Callback: TSimpleBleCallbackOnConnected; UserData: Pointer): TSimpleBleErr; cdecl;
+  SimpleBlePeripheralSetCallbackOnDisconnected : function(Handle: TSimpleBlePeripheral; Callback: TSimpleBleCallbackOnDisconnected; UserData: Pointer): TSimpleBleErr; cdecl;
 
 
 { functions from SimpleBLE simpleble.h }

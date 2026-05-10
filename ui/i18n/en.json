@@ -1,6 +1,8 @@
 {
   "nav": {
-    "monitoring": "Monitoring"
+    "monitoring": "Monitoring",
+    "calibration": "Calibration",
+    "relaxation": "Relaxation"
   },
   "monitoring": {
     "chartTitle": "Device Data Chart",
@@ -12,7 +14,7 @@
     "chartEmptyLoaded": "This loaded session does not contain chartable data.",
     "fitRange": "Fit range",
     "recentWindow": "Recent 5 min",
-    "replaySpeed": "Replay speed",
+    "replaySpeed": "Speed",
     "modeLive": "Live",
     "modeLoaded": "Loaded",
     "stats": {
@@ -20,24 +22,29 @@
       "points": "{count} points"
     },
     "eegMode": {
-      "lines": "Lines",
-      "subpanels": "Sub-panels",
-      "stacked": "Stacked",
-      "heatmap": "Heatmap",
       "bands": "Band bars",
       "radar": "Radar"
     },
     "bandWindowSec": "EEG window (sec)",
     "bandWindowRange": "Avg {start} - {end}",
     "bandScale": {
+      "raw": "Raw",
       "normalized": "Normalized %",
-      "absolute": "Absolute"
+      "calibrated": "Calibrated"
     },
     "badge": {
       "signalGood": "Signal: good",
       "signalFair": "Signal: fair",
       "signalPoor": "Signal: poor",
       "signalNone": "Signal: no data"
+    },
+    "calibration": {
+      "requiredModes": "Attention, Relaxation, Drowse-in",
+      "replayUnsupported": "Calibrated mode is unavailable in replay",
+      "noDevice": "Select an active EEG headset",
+      "profileMissing": "Calibration profile is missing. Complete all three modes.",
+      "incompleteMissing": "Calibrated mode unavailable: missing modes ({modes})",
+      "deltaCaveat": "DELTA is relative: consumer ThinkGear under-represents low frequencies"
     },
     "axis": {
       "time": "Time",
@@ -47,6 +54,7 @@
       "eeg": "EEG",
       "eegBands": "EEG bands",
       "eegPower": "Band power",
+      "eegCalibrated": "Calibrated level",
       "eegScore": "Score",
       "eegPct": "Band %"
     },
@@ -82,6 +90,7 @@
     "capEcg": "ECG capable (Heart Rate)",
     "scanCancelled": "Scan cancelled.",
     "statusProgress": "Scanning BLE devices... {seconds}s elapsed",
+    "statusProbeProgress": "Probing devices: {completed}/{total}",
     "statusLongScanHint": "BLE scan can take more than a minute on some devices.",
     "statusFound": "Found: {name} ({mac})",
     "statusError": "Error: {name}",
@@ -135,6 +144,166 @@
     "minDeltaDescription": "Defines the minimum change between neighboring RR intervals that counts as a breathing phase shift. Used by breath detection to filter out minor fluctuations and noise.",
     "maxRrDescription": "Defines the maximum allowed duration of a single RR interval. Used by breath detection to reject overly long intervals, pauses, and outliers."
   },
+  "calibration": {
+    "deviceLabel": "Device: {name} ({mac})",
+    "debugContext": "Debug mode: run the game without device binding.",
+    "notRunYet": "Calibration not run yet",
+    "hub": {
+      "title": "Calibration",
+      "subtitle": "Choose the mini-game for the target state and run it on this same tab.",
+      "guideTitle": "Why this matters",
+      "guideIntro": "ThinkGear is not a medical calibration process. Here we build your session-level personal baseline.",
+      "guideStabilization": "After connection, allow 10-30 seconds for signal stabilization before capture.",
+      "guideFit": "Headset repositioning, contact changes, or another user will shift the baseline.",
+      "guideModes": "The three modes collect representative states for attention, relaxation, and drowse.",
+      "guideRecommendation": "Recalibration before each session is recommended, but not mandatory.",
+      "profileUnknown": "Strict calibrated mode becomes available after binding to an EEG device.",
+      "profileMissing": "Profile not created yet: complete all three modes to unlock calibrated mode.",
+      "profileIncomplete": "Profile is incomplete. Remaining modes: {modes}",
+      "profileReady": "Profile is complete: calibrated mode is available in Monitoring.",
+      "attentionButton": "Attention",
+      "attentionCaption": "A mode for sustained concentration and fast visual selection.",
+      "attentionHint": "High beta/gamma",
+      "relaxationButton": "Relaxation",
+      "relaxationCaption": "A soft breathing pacer with optional audio.",
+      "relaxationHint": "Maximum alpha",
+      "drowseButton": "Drowse-in",
+      "drowseCaption": "Audio-only mode with binaural beats in the delta/theta range.",
+      "drowseHint": "Delta/theta"
+    },
+    "actions": {
+      "open": "Calibration",
+      "openAlphaRelaxation": "Relaxation",
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Run again",
+      "close": "Close",
+      "clearCalibration": "Clear calibration"
+    },
+    "liveEegConnecting": "Connecting the EEG headset and waiting for the first live samples for calibration.",
+    "liveEegRequired": "Live EEG samples are not available yet. Check that the headset is selected, reachable, and that monitoring is running.",
+    "eegCapture": {
+      "deviceMissing": "EEG mode capture was not saved: no bound EEG device was found.",
+      "insufficientSamples": "EEG mode capture was not saved: valid samples are not enough ({accepted}/{required}). Keep still and run this mode again.",
+      "invalidBandRanges": "EEG mode capture was not saved: captured band ranges are invalid. Improve signal quality and run this mode again."
+    },
+    "cardReason": {
+      "notRun": "Mode not completed",
+      "profileMissing": "EEG profile not created",
+      "captureMissing": "EEG mode capture not saved",
+      "invalidBands": "Invalid EEG band ranges"
+    },
+    "shapes": {
+      "circle": "circle",
+      "triangle": "triangle"
+    },
+    "attention": {
+      "title": "Attention calibration",
+      "subtitle": "Follow natural numbers from 1 upward, starting with a circle and alternating shapes: circle, triangle, circle...",
+      "difficultyTitle": "Difficulty",
+      "difficultyHint": "Choose the operation set and the number scale before starting.",
+      "durationLabel": "Duration (min)",
+      "operationDifficultyLabel": "Expression type",
+      "numberScaleLabel": "Number scale",
+      "operationPresets": {
+        "addOnly": "Only +",
+        "addSubtract": "Only + and -",
+        "addSubtractMultiply": "Only +, - and *",
+        "all": "All expressions"
+      },
+      "numberScalePresets": {
+        "small": "Small only: 1-9",
+        "smallLarge": "Small and large: 1-20"
+      },
+      "movingShapesLabel": "Moving shapes",
+      "movingShapesPctOptions": {
+        "0": "None (0%)",
+        "25": "Few (25%)",
+        "50": "Half (50%)",
+        "75": "Most (75%)",
+        "100": "All (100%)"
+      },
+      "movingSpeedLabel": "Movement speed",
+      "movingSpeedOptions": {
+        "slow": "Slow",
+        "medium": "Medium",
+        "fast": "Fast"
+      },
+      "instructionsTitle": "One-minute task",
+      "instructionsBody": "Several arithmetic expressions are visible at the same time. Keep moving through the sequence without stopping after mistakes.",
+      "instructionsRuleOrder": "Move through the natural-number sequence from 1 upward: 1, 2, 3, ...",
+      "instructionsRuleShape": "The first step is always a circle. Then strictly alternate shapes: circle, triangle, circle, triangle. If the same result appears in both shapes, pick only the shape required for the current step.",
+      "instructionsRuleTime": "Activity duration is set by the Duration field.",
+      "previousRunTitle": "Previous result",
+      "previousRunAt": "Last run: {time}",
+      "timerLabel": "Seconds left",
+      "completedLabel": "Correct",
+      "errorsLabel": "Errors",
+      "accuracyLabel": "Accuracy",
+      "targetLabel": "Current target",
+      "targetHint": "Find result {number}. Required shape: {shape}.",
+      "tokenLabel": "Expression {expression}, result {number}, shape {shape}",
+      "finishedTitle": "Activity complete",
+      "finishedSubtitle": "The minute is over. Review the result or run the task again.",
+      "summaryLabel": "Attention calibration",
+      "summaryMetrics": "Correct: {count} · Errors: {errors}"
+    },
+    "alphaRelaxation": {
+      "title": "Breathing Light",
+      "subtitle": "A gentle visual pacer with optional Gnaural audio.",
+      "phaseReady": "Ready",
+      "instructionsBody": "Keep a soft gaze on the orb and follow its rhythm. The visual pacer remains fully useful even when audio is off.",
+      "instructionsRuleBreath": "Inhale while the orb expands, exhale slowly while it contracts.",
+      "instructionsRuleGaze": "Do not count or chase details. A calm, steady gaze is enough.",
+      "instructionsRuleAudio": "Audio is optional and plays through Gnaural on the same machine. Headphones are needed for binaural effect.",
+      "controls": {
+        "durationLabel": "Duration (min)",
+        "soundLabel": "Audio via Gnaural"
+      },
+      "phases": {
+        "inhale": "Inhale",
+        "exhale": "Exhale"
+      },
+      "status": {
+        "cycles": "Cycles: {count}",
+        "audioOn": "Audio command sent to Gnaural",
+        "audioOff": "Audio is off, visual orb only",
+        "audioPending": "The orb works independently of audio",
+        "audioStartFailed": "Failed to send the audio start command"
+      },
+      "finishedTitle": "Session complete",
+      "finishedSubtitle": "The pacer ran to the end. You can repeat the session or change the duration.",
+      "previousRunTitle": "Previous session",
+      "previousRunAt": "Last run: {time}",
+      "summaryLabel": "Relaxation",
+      "summaryMetrics": "Duration: {minutes} min · Cycles: {cycles}"
+    },
+    "sleepDrowse": {
+      "title": "Drowse-in",
+      "subtitle": "Audio-only mode: binaural beats in the delta/theta range via Gnaural.",
+      "phaseReady": "Ready",
+      "phaseRunning": "Session running",
+      "phaseFinished": "Session complete",
+      "finishedTitle": "Session complete",
+      "finishedSubtitle": "The audio session finished successfully. You can repeat it or change duration.",
+      "previousRunTitle": "Previous session",
+      "previousRunAt": "Last run: {time}",
+      "summaryLabel": "Drowse-in",
+      "summaryMetrics": "Duration: {minutes} min",
+      "instructionsBody": "Put on headphones, get comfortable and close your eyes. The screen will dim automatically once the session starts.",
+      "instructionsRuleHeadphones": "Binaural beats only work with headphones, one channel per ear.",
+      "instructionsRuleQuiet": "Reduce ambient noise and pick a comfortable volume in advance.",
+      "instructionsRuleDim": "After start only the timer and a large Stop button remain visible.",
+      "controls": {
+        "durationLabel": "Duration (min)"
+      },
+      "status": {
+        "audioOn": "Audio command sent to Gnaural",
+        "audioPending": "Waiting for audio start",
+        "audioStartFailed": "Failed to send the audio start command"
+      }
+    }
+  },
   "deviceControl": {
     "stopButton": "Stop",
     "clearButton": "Clear",
@@ -151,20 +320,80 @@
     "rawOutputTitle": "Raw JSONL output",
     "noOutput": "No output yet",
     "noDeviceSelected": "not selected",
-    "offline": "Offline",
-    "inactive": "Inactive",
+    "offline": "Not connected",
+    "connected": "Connected",
+    "checking": "Checking...",
+    "found": "Found",
+    "searching": "Searching...",
+    "inactive": "Not connected",
     "connectTimeoutSec": "Connect timeout (sec)",
     "connectTimeoutSecDescription": "Defines how many seconds the UI waits for a BLE device to connect before marking the attempt as failed. Used during ECG and other BLE sensor connection attempts; it is not applied to EEG over COM.",
     "eegStaleSec": "EEG stale threshold (sec)",
     "eegStaleSecDescription": "Defines how many seconds without fresh EEG data are allowed before the EEG stream is considered stale. Used by the BodyMonitor runtime: if no new data arrives longer than this interval, EEG is marked as disconnected.",
     "connectButton": "Connect",
+    "startRecordingButton": "Start recording",
+    "stopRecordingButton": "Stop recording",
     "selectCapabilityButton": "Select {capability}",
     "addButton": "Add",
-    "inactiveButton": "Mark inactive",
-    "activateButton": "Enable",
+    "expandDetailsButton": "Show settings",
+    "collapseDetailsButton": "Hide settings",
+    "inactiveButton": "Do not connect",
+    "activateButton": "Connect",
     "removeButton": "Remove",
     "connecting": "Connecting...",
+    "scanQueued": "Queued",
+    "scanProbing": "Probing...",
+    "scanComplete": "Probed",
+    "scanFailed": "Probe failed",
+    "scanNotConnectable": "Not connectable",
+    "scanCancelled": "Cancelled",
     "copyCmd": "Copy to clipboard",
-    "cmdCopied": "Command line copied"
+    "cmdCopied": "Command line copied",
+    "reconnect": {
+      "title": "EEG Headset",
+      "message": "Connection lost with EEG headset. Connect it to continue.",
+      "closeButton": "Close"
+    }
+  },
+  "eegDiagnostics": {
+    "status": {
+      "hidden": "No EEG selected",
+      "checking": "Checking connection...",
+      "ready": "Ready to connect",
+      "connected": "EEG connected",
+      "reconnected": "EEG reconnected",
+      "retrying": "Connecting...",
+      "retryingPort": "Trying {port}...",
+      "stale": "No fresh EEG data",
+      "offline": "EEG not connected",
+      "offlineError": "Connect error (TG_Connect {code})",
+      "comMissing": "Windows COM port not found",
+      "comMissingBleSeen": "Headset visible via BLE, waiting for serial connection",
+      "bleMissing": "Headset not found via BLE",
+      "error": "Diagnostics error"
+    },
+    "panel": {
+      "title": "EEG Diagnostics",
+      "checkNow": "Check now",
+      "mac": "MAC address",
+      "bleStatus": "BLE",
+      "bleReachable": "reachable",
+      "bleUnreachable": "unreachable",
+      "comPort": "COM port",
+      "comFound": "found",
+      "comNotFound": "not found",
+      "comDescription": "Port description",
+      "pnpDeviceId": "PNP Device ID",
+      "connectStage": "Connect stage",
+      "connectPort": "Active port",
+      "connectAttempts": "Connect attempts",
+      "connectError": "Last SDK error",
+      "sdkVersion": "SDK version",
+      "poorSignal": "Signal quality",
+      "lastSampleAge": "Last sample",
+      "sampleAgeSec": "{sec}s ago",
+      "lastCheck": "Last check",
+      "checkAgeSec": "{sec}s ago"
+    }
   }
 }

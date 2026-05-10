@@ -4,12 +4,18 @@ import { basename, dirname, resolve } from "node:path"
 import type { PipedSubprocess } from "bun"
 import {
   isServerReadyLine,
+  parseBlePingResultFromJson,
+  parseBleScanDeviceStatusFromJson,
   parseDeviceInfoFromJson,
+  parseEegDiagnosticsFromJson,
   parseJsonLine,
   parseStdioAck,
   isStdioReadyLine,
   type DeviceInfo,
+  type BodyMonitorEegDiagnosticsEvent,
   type BodyMonitorOutputEvent,
+  type BodyMonitorPingResultEvent,
+  type BodyMonitorScanDeviceStatusEvent,
   type BodyMonitorState,
   type BodyMonitorStdioAckEvent
 } from "./protocol"
@@ -34,6 +40,7 @@ export interface ProcessManagerCallbacks {
   readonly onLine?: (aEvent: BodyMonitorOutputEvent) => void
   readonly onDevice?: (aRunId: string, aDevice: DeviceInfo) => void
   readonly onDevices?: (aRunId: string, aDevices: readonly DeviceInfo[]) => void
+  readonly onScanDeviceStatus?: (aRunId: string, aEvent: Omit<BodyMonitorScanDeviceStatusEvent, "runId">) => void
   readonly onError?: (aMessage: string, aRunId?: string) => void
   readonly onExit?: (aRunId: string, aExitCode: number) => void
   readonly onStdioAck?: (aAck: BodyMonitorStdioAckEvent) => void
@@ -41,6 +48,8 @@ export interface ProcessManagerCallbacks {
 }
 
 const STOP_TIMEOUT_MS = 5000
+const PING_TIMEOUT_MS = 15000
+const DIAGNOSE_EEG_TIMEOUT_MS = 20000
 const DEFAULT_SERVER_KEEP_ALIVE_SEC = 15
 const STOP_ACTIVE_WORKERS_ERROR = "Stop active workers first"
 
@@ -93,6 +102,17 @@ const quoteCommandLineArg = (aValue: string): string => {
 
 const buildCommandLine = (aExecutablePath: string, aParams: readonly string[]): string => {
   return [basename(aExecutablePath), ...aParams].map(quoteCommandLineArg).join(" ")
+}
+
+const upsertAccumulatedDevice = (aDevices: readonly DeviceInfo[], aNextDevice: DeviceInfo): DeviceInfo[] => {
+  const existingIndex = aDevices.findIndex((device) => device.mac === aNextDevice.mac)
+  if (existingIndex < 0) {
+    return [...aDevices, aNextDevice]
+  }
+
+  const nextDevices = [...aDevices]
+  nextDevices[existingIndex] = aNextDevice
+  return nextDevices
 }
 
 const resolveBodyMonitorExecutablePath = (aWorkspaceRoot: string): {
@@ -339,6 +359,183 @@ export class ProcessManager {
     this.dispatchServerListDevices()
   }
 
+  public async pingDevice(aMac: string): Promise<BodyMonitorPingResultEvent> {
+    const targetMac = aMac.trim().toLowerCase()
+    const startedAtMs = Date.now()
+
+    if (targetMac === "") {
+      return {
+        type: "bodymonitor_ping_result",
+        mac: "",
+        ok: false,
+        message: "Ping target MAC is empty.",
+        elapsedMs: 0,
+      }
+    }
+
+    let child: ChildProcess
+    try {
+      child = Bun.spawn([
+        this.bodyMonitorExePath,
+        `--ping-device=${targetMac}`,
+        "--log",
+        "-",
+        "--log-format=jsonl",
+      ], {
+        cwd: this.bodyMonitorCwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+    } catch (error) {
+      return {
+        type: "bodymonitor_ping_result",
+        mac: targetMac,
+        ok: false,
+        message: error instanceof Error ? error.message : "Failed to start BodyMonitor ping process",
+        elapsedMs: Date.now() - startedAtMs,
+      }
+    }
+
+    let parsedResult: BodyMonitorPingResultEvent | null = null
+    const stderrLines: string[] = []
+
+    const stdoutTask = forEachLine(child.stdout, async (line) => {
+      console.log(`[ping:stdout] ${line}`)
+      const parsedJson = parseJsonLine(line)
+      const pingResult = parseBlePingResultFromJson(parsedJson)
+      if (pingResult !== null) {
+        parsedResult = pingResult
+      }
+    })
+
+    const stderrTask = forEachLine(child.stderr, async (line) => {
+      console.error(`[ping:stderr] ${line}`)
+      stderrLines.push(line)
+    })
+
+    const exitedInTime = await waitFor(child.exited, PING_TIMEOUT_MS)
+    if (!exitedInTime) {
+      child.kill(9)
+      await child.exited
+    }
+
+    await Promise.all([stdoutTask, stderrTask])
+    const exitCode = await child.exited
+    const elapsedMs = Date.now() - startedAtMs
+
+    if (parsedResult !== null) {
+      const pingResult = parsedResult as BodyMonitorPingResultEvent
+      return {
+        type: pingResult.type,
+        mac: pingResult.mac,
+        ok: pingResult.ok,
+        ...(pingResult.identifier !== undefined ? { identifier: pingResult.identifier } : {}),
+        ...(pingResult.message !== undefined ? { message: pingResult.message } : {}),
+        elapsedMs: pingResult.elapsedMs ?? elapsedMs,
+      }
+    }
+
+    const stderrText = stderrLines.join("\n").trim()
+    const message = !exitedInTime
+      ? `Ping timed out after ${PING_TIMEOUT_MS}ms.`
+      : stderrText !== ""
+        ? stderrText
+        : `Ping process exited with code ${exitCode}.`
+
+    return {
+      type: "bodymonitor_ping_result",
+      mac: targetMac,
+      ok: false,
+      message,
+      elapsedMs,
+    }
+  }
+
+  public async diagnoseEeg(aMac: string): Promise<BodyMonitorEegDiagnosticsEvent> {
+    const targetMac = aMac.trim().toLowerCase()
+    const startedAtMs = Date.now()
+
+    if (targetMac === "") {
+      return {
+        type: "bodymonitor_eeg_diagnostics",
+        mac: "",
+        updatedAtMs: startedAtMs,
+        overallKey: "error",
+        message: "Diagnose target MAC is empty.",
+      }
+    }
+
+    let child: ChildProcess
+    try {
+      child = Bun.spawn([
+        this.bodyMonitorExePath,
+        `--diagnose-eeg=${targetMac}`,
+        "--log",
+        "-",
+        "--log-format=jsonl",
+      ], {
+        cwd: this.bodyMonitorCwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+    } catch (error) {
+      return {
+        type: "bodymonitor_eeg_diagnostics",
+        mac: targetMac,
+        updatedAtMs: Date.now(),
+        overallKey: "error",
+        message: error instanceof Error ? error.message : "Failed to start BodyMonitor diagnose process",
+      }
+    }
+
+    let parsedResult: BodyMonitorEegDiagnosticsEvent | null = null
+    const stderrLines: string[] = []
+
+    const stdoutTask = forEachLine(child.stdout, async (line) => {
+      console.log(`[diagnose-eeg:stdout] ${line}`)
+      const parsedJson = parseJsonLine(line)
+      const diagResult = parseEegDiagnosticsFromJson(parsedJson)
+      if (diagResult !== null) {
+        parsedResult = diagResult
+      }
+    })
+
+    const stderrTask = forEachLine(child.stderr, async (line) => {
+      console.error(`[diagnose-eeg:stderr] ${line}`)
+      stderrLines.push(line)
+    })
+
+    const exitedInTime = await waitFor(child.exited, DIAGNOSE_EEG_TIMEOUT_MS)
+    if (!exitedInTime) {
+      child.kill(9)
+      await child.exited
+    }
+
+    await Promise.all([stdoutTask, stderrTask])
+    const exitCode = await child.exited
+    const elapsedMs = Date.now() - startedAtMs
+
+    if (parsedResult !== null) {
+      return parsedResult as BodyMonitorEegDiagnosticsEvent
+    }
+
+    const stderrText = stderrLines.join("\n").trim()
+    const message = !exitedInTime
+      ? `Diagnose timed out after ${DIAGNOSE_EEG_TIMEOUT_MS}ms.`
+      : stderrText !== ""
+        ? stderrText
+        : `Diagnose process exited with code ${exitCode}.`
+
+    return {
+      type: "bodymonitor_eeg_diagnostics",
+      mac: targetMac,
+      updatedAtMs: Date.now(),
+      overallKey: "error",
+      message,
+      errorCode: elapsedMs,
+    }
+  }
+
   private queueListDevicesAfterRestart(): void {
     this.pendingListDevicesAfterStop = false
     if (this.pendingListDevicesAfterRestart) {
@@ -469,12 +666,15 @@ export class ProcessManager {
       }
 
       const device = parseDeviceInfoFromJson(parsedJson)
-      if (device === null) {
-        return
+      if (device !== null) {
+        this.accumulatedDevices = upsertAccumulatedDevice(this.accumulatedDevices, device)
+        this.callbacks?.onDevice?.(aRunId, device)
       }
 
-      this.accumulatedDevices.push(device)
-      this.callbacks?.onDevice?.(aRunId, device)
+      const scanDeviceStatus = parseBleScanDeviceStatusFromJson(parsedJson)
+      if (scanDeviceStatus !== null) {
+        this.callbacks?.onScanDeviceStatus?.(aRunId, scanDeviceStatus)
+      }
     })
   }
 

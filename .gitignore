@@ -8,3 +8,4 @@ cli/vendor/EEGAlgoSDK/AlgoSdkDll64.dll
 **/node_modules/
 **/.quasar/
 **/dist/
+archive

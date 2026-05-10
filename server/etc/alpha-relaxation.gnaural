@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Alpha Relaxation Schedule (60 s)
+  =================================
+  Purpose: facilitate a calm state that is compatible with alpha activity.
+
+  Notes:
+  - Beat sweep: 12 Hz -> 9 Hz -> 12 Hz over one minute.
+  - Carrier: 144 Hz binaural voice, intended for headphones.
+  - Pink noise is a quiet ambient mask.
+  - First and last entry of each voice match so repeated loops stay seamless.
+
+  Safe edits:
+  - Change <loops> for whole-minute duration.
+  - Keep first and last entry identical inside each voice.
+  - Keep beatfreq in 16..26 to stay inside 8..13 Hz alpha range.
+-->
+<gnaural>
+  <title>Alpha Relaxation 60s</title>
+  <author>MindWave</author>
+  <schedule_description>Alpha sweep 12 Hz to 9 Hz to 12 Hz with gentle fade in and out.</schedule_description>
+  <loops>1</loops>
+  <overallvolume_left>0.85</overallvolume_left>
+  <overallvolume_right>0.85</overallvolume_right>
+  <stereoswap>0</stereoswap>
+
+  <voice>
+    <id>1</id>
+    <type>0</type>
+    <description>Binaural carrier 144 Hz</description>
+    <voice_mute>0</voice_mute>
+    <voice_mono>0</voice_mono>
+    <mindwave_hidden>0</mindwave_hidden>
+    <mindwave_color>#88c0d0</mindwave_color>
+    <entries>
+      <entry duration="8" basefreq="144" beatfreq="24" volume_left="0.00" volume_right="0.00"/>
+      <entry duration="12" basefreq="144" beatfreq="22" volume_left="0.45" volume_right="0.45"/>
+      <entry duration="20" basefreq="144" beatfreq="18" volume_left="0.55" volume_right="0.55"/>
+      <entry duration="12" basefreq="144" beatfreq="20" volume_left="0.45" volume_right="0.45"/>
+      <entry duration="8" basefreq="144" beatfreq="24" volume_left="0.00" volume_right="0.00"/>
+    </entries>
+  </voice>
+
+  <voice>
+    <id>2</id>
+    <type>1</type>
+    <description>Pink noise ambience</description>
+    <voice_mute>0</voice_mute>
+    <voice_mono>1</voice_mono>
+    <mindwave_hidden>0</mindwave_hidden>
+    <mindwave_color>#4c566a</mindwave_color>
+    <entries>
+      <entry duration="10" basefreq="0" beatfreq="0" volume_left="0.00" volume_right="0.00"/>
+      <entry duration="40" basefreq="0" beatfreq="0" volume_left="0.12" volume_right="0.12"/>
+      <entry duration="10" basefreq="0" beatfreq="0" volume_left="0.00" volume_right="0.00"/>
+    </entries>
+  </voice>
+</gnaural>

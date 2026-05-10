@@ -1,6 +1,8 @@
 {
   "nav": {
-    "monitoring": "Мониторинг"
+    "monitoring": "Мониторинг",
+    "calibration": "Калибровка",
+    "relaxation": "Расслабление"
   },
   "monitoring": {
     "chartTitle": "График данных устройств",
@@ -8,7 +10,7 @@
     "chartLoadedSubtitle": "Архивные данные загружаются целиком для zoom и анализа.",
     "fitRange": "Вписать диапазон",
     "recentWindow": "Последние 5 мин",
-    "replaySpeed": "Скорость replay",
+    "replaySpeed": "Скорость",
     "chartLoading": "Загрузка данных графика из архива...",
     "chartEmptyTitle": "Данных для графика пока нет",
     "stats": {
@@ -20,24 +22,29 @@
     "modeLive": "Live",
     "modeLoaded": "Загружено",
     "eegMode": {
-      "lines": "Линии",
-      "subpanels": "Панели",
-      "stacked": "Стопка",
-      "heatmap": "Тепловая карта",
       "bands": "Столбцы ритмов",
       "radar": "Радар"
     },
     "bandWindowSec": "Окно ЭЭГ (сек)",
     "bandWindowRange": "Среднее {start} - {end}",
     "bandScale": {
+      "raw": "Raw",
       "normalized": "Норм. %",
-      "absolute": "Абсолют"
+      "calibrated": "Calibrated"
     },
     "badge": {
       "signalGood": "Сигнал: хороший",
       "signalFair": "Сигнал: средний",
       "signalPoor": "Сигнал: плохой",
       "signalNone": "Сигнал: нет данных"
+    },
+    "calibration": {
+      "requiredModes": "Внимание, Расслабление, Засыпание",
+      "replayUnsupported": "Calibrated недоступен в режиме replay",
+      "noDevice": "Выберите активную EEG-гарнитуру",
+      "profileMissing": "Профиль калибровки отсутствует. Пройдите 3 режима.",
+      "incompleteMissing": "Calibrated недоступен: не завершены режимы ({modes})",
+      "deltaCaveat": "DELTA относительна: потребительский ThinkGear занижает низкие частоты"
     },
     "axis": {
       "time": "Время",
@@ -47,6 +54,7 @@
       "eeg": "ЭЭГ",
       "eegBands": "ЭЭГ бенды",
       "eegPower": "Мощность ритма",
+      "eegCalibrated": "Калиброванный уровень",
       "eegScore": "Оценка",
       "eegPct": "% бенда"
     },
@@ -82,6 +90,7 @@
     "capEcg": "ЭКГ (Heart Rate)",
     "scanCancelled": "Сканирование отменено.",
     "statusProgress": "Идёт BLE-сканирование... прошло {seconds} с",
+    "statusProbeProgress": "Опрос устройств: {completed}/{total}",
     "statusLongScanHint": "BLE-сканирование на некоторых устройствах может занимать больше минуты.",
     "statusFound": "Найдено: {name} ({mac})",
     "statusError": "Ошибка: {name}",
@@ -135,6 +144,166 @@
     "minDeltaDescription": "Задаёт минимальное изменение между соседними RR-интервалами, которое считается сменой дыхательной фазы. Используется в детекции дыхания, чтобы отфильтровать мелкие колебания и шум.",
     "maxRrDescription": "Задаёт максимально допустимую длину одного RR-интервала. Используется в детекции дыхания для отбрасывания слишком длинных интервалов, пауз и выбросов."
   },
+  "calibration": {
+    "deviceLabel": "Устройство: {name} ({mac})",
+    "debugContext": "Режим отладки: игра запускается без привязки к устройству.",
+    "notRunYet": "Калибровка не проводилась",
+    "hub": {
+      "title": "Калибровка",
+      "subtitle": "Выберите миниигру под нужное состояние и запускайте её на этой же вкладке.",
+      "guideTitle": "Зачем это нужно",
+      "guideIntro": "ThinkGear не выполняет медицинскую калибровку. Здесь мы собираем ваш персональный baseline за текущую сессию.",
+      "guideStabilization": "После подключения дайте сигналу стабилизироваться 10-30 секунд перед захватом.",
+      "guideFit": "Перепосадка гарнитуры, смена контакта и другой пользователь меняют baseline.",
+      "guideModes": "Три режима собирают репрезентативные состояния: внимание, расслабление и засыпание.",
+      "guideRecommendation": "Перед новой сессией калибровку лучше обновлять, но это рекомендация, а не блокер.",
+      "profileUnknown": "Строгая calibrated-калибровка доступна после привязки к EEG-устройству.",
+      "profileMissing": "Профиль еще не создан: пройдите 3 режима для активации calibrated.",
+      "profileIncomplete": "Профиль неполный. Осталось пройти: {modes}",
+      "profileReady": "Профиль полный: режим calibrated доступен в Monitoring.",
+      "attentionButton": "Внимание",
+      "attentionCaption": "Режим на удержание концентрации и быстрый визуальный выбор.",
+      "attentionHint": "Высокая бета/гамма",
+      "relaxationButton": "Расслабление",
+      "relaxationCaption": "Режим мягкого дыхательного пейсера с опциональным звуком.",
+      "relaxationHint": "Максимум альфа",
+      "drowseButton": "Засыпание",
+      "drowseCaption": "Чистый аудио-режим бинауральных биений в дельта/тета-диапазоне.",
+      "drowseHint": "Дельта/тета"
+    },
+    "actions": {
+      "open": "Калибровка",
+      "openAlphaRelaxation": "Расслабление",
+      "start": "Начать",
+      "stop": "Стоп",
+      "restart": "Повторить",
+      "close": "Закрыть",
+      "clearCalibration": "Очистить калибровку"
+    },
+    "liveEegConnecting": "Подключаем EEG-гарнитуру и ждём первые live-данные для калибровки.",
+    "liveEegRequired": "Live-данные EEG пока недоступны. Проверьте, что гарнитура выбрана, доступна и поток мониторинга запущен.",
+    "eegCapture": {
+      "deviceMissing": "EEG-захват режима не сохранён: привязанное EEG-устройство не найдено.",
+      "insufficientSamples": "EEG-захват режима не сохранён: недостаточно валидных сэмплов ({accepted}/{required}). Сохраняйте неподвижность и запустите этот режим снова.",
+      "invalidBandRanges": "EEG-захват режима не сохранён: получены некорректные диапазоны бэндов. Улучшите качество сигнала и запустите режим снова."
+    },
+    "cardReason": {
+      "notRun": "Режим не пройден",
+      "profileMissing": "EEG-профиль не создан",
+      "captureMissing": "EEG-профиль режима не сохранён",
+      "invalidBands": "Некорректные диапазоны EEG"
+    },
+    "shapes": {
+      "circle": "круг",
+      "triangle": "треугольник"
+    },
+    "attention": {
+      "title": "Калибровка внимания",
+      "subtitle": "Идите по натуральным числам от 1 и выше, начиная с круга и чередуя фигуры: круг, треугольник, круг...",
+      "difficultyTitle": "Сложность",
+      "difficultyHint": "Перед стартом выберите набор операций и диапазон чисел в примерах.",
+      "durationLabel": "Длительность (мин)",
+      "operationDifficultyLabel": "Тип выражений",
+      "numberScaleLabel": "Размер чисел",
+      "operationPresets": {
+        "addOnly": "Только +",
+        "addSubtract": "Только + и -",
+        "addSubtractMultiply": "Только +, - и *",
+        "all": "Все выражения"
+      },
+      "numberScalePresets": {
+        "small": "Только маленькие: 1-9",
+        "smallLarge": "Маленькие и большие: 1-20"
+      },
+      "movingShapesLabel": "Движущиеся фигуры",
+      "movingShapesPctOptions": {
+        "0": "Нет (0%)",
+        "25": "Мало (25%)",
+        "50": "Половина (50%)",
+        "75": "Большинство (75%)",
+        "100": "Все (100%)"
+      },
+      "movingSpeedLabel": "Скорость движения",
+      "movingSpeedOptions": {
+        "slow": "Медленно",
+        "medium": "Средне",
+        "fast": "Быстро"
+      },
+      "instructionsTitle": "Задание на одну минуту",
+      "instructionsBody": "На поле одновременно показано несколько арифметических выражений. Двигайтесь по последовательности без остановок, даже если ошиблись.",
+      "instructionsRuleOrder": "Двигайтесь по последовательности натуральных чисел от 1 и выше: 1, 2, 3, ...",
+      "instructionsRuleShape": "Первый шаг всегда с круга. Далее строго чередуйте фигуры: круг, треугольник, круг, треугольник. Если один и тот же результат есть в обеих фигурах, выбирайте только фигуру текущего шага.",
+      "instructionsRuleTime": "Длительность активности задается полем «Длительность».",
+      "previousRunTitle": "Предыдущий результат",
+      "previousRunAt": "Последний запуск: {time}",
+      "timerLabel": "Осталось секунд",
+      "completedLabel": "Верно",
+      "errorsLabel": "Ошибки",
+      "accuracyLabel": "Точность",
+      "targetLabel": "Текущая цель",
+      "targetHint": "Найдите результат {number}. Нужная фигура: {shape}.",
+      "tokenLabel": "Выражение {expression}, результат {number}, фигура {shape}",
+      "finishedTitle": "Активность завершена",
+      "finishedSubtitle": "Минута закончилась. Просмотрите результат или запустите задание ещё раз.",
+      "summaryLabel": "Калибровка внимания",
+      "summaryMetrics": "Верно: {count} · Ошибки: {errors}"
+    },
+    "alphaRelaxation": {
+      "title": "Дыхание света",
+      "subtitle": "Мягкий визуальный пейсер с опциональным звуком через Gnaural.",
+      "phaseReady": "Подготовка",
+      "instructionsBody": "Смотрите мягко в центр шара и дышите в его ритме. Даже если звук выключен, визуальный пейсер работает полностью.",
+      "instructionsRuleBreath": "На расширение шара делайте спокойный вдох, на сжатие — длинный выдох.",
+      "instructionsRuleGaze": "Не пытайтесь ничего считать или отслеживать. Достаточно мягкого неподвижного взгляда.",
+      "instructionsRuleAudio": "Звук опционален и рассчитан на ту же машину. Для бинаурального эффекта нужны наушники.",
+      "controls": {
+        "durationLabel": "Длительность (мин)",
+        "soundLabel": "Звук через Gnaural"
+      },
+      "phases": {
+        "inhale": "Вдох",
+        "exhale": "Выдох"
+      },
+      "status": {
+        "cycles": "Циклы: {count}",
+        "audioOn": "Звук отправлен в Gnaural",
+        "audioOff": "Звук выключен, работает только шар",
+        "audioPending": "Шар работает независимо от звука",
+        "audioStartFailed": "Не удалось отправить команду на запуск звука"
+      },
+      "finishedTitle": "Сессия завершена",
+      "finishedSubtitle": "Пейсер отработал до конца. Можно повторить сессию или изменить длительность.",
+      "previousRunTitle": "Предыдущая сессия",
+      "previousRunAt": "Последний запуск: {time}",
+      "summaryLabel": "Расслабление",
+      "summaryMetrics": "Длительность: {minutes} мин · Циклы: {cycles}"
+    },
+    "sleepDrowse": {
+      "title": "Засыпание",
+      "subtitle": "Чистый аудио-режим: бинауральные биения в дельта/тета-диапазоне через Gnaural.",
+      "phaseReady": "Подготовка",
+      "phaseRunning": "Идёт сессия",
+      "phaseFinished": "Сессия завершена",
+      "finishedTitle": "Сессия завершена",
+      "finishedSubtitle": "Аудио-режим отработал до конца. Можно повторить или изменить длительность.",
+      "previousRunTitle": "Предыдущая сессия",
+      "previousRunAt": "Последний запуск: {time}",
+      "summaryLabel": "Засыпание",
+      "summaryMetrics": "Длительность: {minutes} мин",
+      "instructionsBody": "Наденьте наушники, лягте удобно и закройте глаза. Экран автоматически затемнится после старта.",
+      "instructionsRuleHeadphones": "Бинауральные биения работают только в наушниках, по одному каналу на ухо.",
+      "instructionsRuleQuiet": "Уберите внешние шумы и выберите комфортную громкость заранее.",
+      "instructionsRuleDim": "После старта виден только таймер и большая кнопка «Стоп».",
+      "controls": {
+        "durationLabel": "Длительность (мин)"
+      },
+      "status": {
+        "audioOn": "Звук отправлен в Gnaural",
+        "audioPending": "Ожидание запуска звука",
+        "audioStartFailed": "Не удалось отправить команду на запуск звука"
+      }
+    }
+  },
   "deviceControl": {
     "stopButton": "Остановить",
     "clearButton": "Очистить",
@@ -151,20 +320,80 @@
     "rawOutputTitle": "Вывод JSONL",
     "noOutput": "Нет данных",
     "noDeviceSelected": "не выбрано",
-    "offline": "Offline",
-    "inactive": "Неактивно",
+    "offline": "Не подключено",
+    "connected": "Подключено",
+    "checking": "Проверка...",
+    "found": "Найдено",
+    "searching": "Поиск...",
+    "inactive": "Не подключено",
     "connectTimeoutSec": "Таймаут подключения (сек)",
     "connectTimeoutSecDescription": "Задаёт, сколько секунд интерфейс ждёт подключения BLE-устройства до пометки попытки как неуспешной. Используется при подключении ECG и других BLE-датчиков; для EEG через COM этот таймер не применяется.",
     "eegStaleSec": "Порог устаревания ЭЭГ (сек)",
     "eegStaleSecDescription": "Задаёт, через сколько секунд без свежих данных поток ЭЭГ считается устаревшим. Используется в рантайме BodyMonitor: если новые данные не приходят дольше этого интервала, EEG помечается как disconnected.",
     "connectButton": "Подключить",
+    "startRecordingButton": "Начать запись",
+    "stopRecordingButton": "Остановить запись",
     "selectCapabilityButton": "Выбрать {capability}",
     "addButton": "Добавить",
-    "inactiveButton": "Сделать неактивным",
-    "activateButton": "Включить",
+    "expandDetailsButton": "Показать настройки",
+    "collapseDetailsButton": "Скрыть настройки",
+    "inactiveButton": "Не подключать",
+    "activateButton": "Подключать",
     "removeButton": "Удалить",
     "connecting": "Подключение...",
+    "scanQueued": "В очереди",
+    "scanProbing": "Опрос...",
+    "scanComplete": "Опрошено",
+    "scanFailed": "Ошибка опроса",
+    "scanNotConnectable": "Не подключаемо",
+    "scanCancelled": "Отменено",
     "copyCmd": "Копировать в буфер обмена",
-    "cmdCopied": "Командная строка скопирована"
+    "cmdCopied": "Командная строка скопирована",
+    "reconnect": {
+      "title": "ЭЭГ гарнитура",
+      "message": "Потеряна связь с ЭЭГ гарнитурой. Подключите её для продолжения.",
+      "closeButton": "Закрыть"
+    }
+  },
+  "eegDiagnostics": {
+    "status": {
+      "hidden": "ЭЭГ не выбрана",
+      "checking": "Проверяем соединение...",
+      "ready": "Готово к подключению",
+      "connected": "ЭЭГ подключена",
+      "reconnected": "ЭЭГ переподключена",
+      "retrying": "Подключаемся...",
+      "retryingPort": "Пробуем открыть {port}...",
+      "stale": "Нет свежих данных ЭЭГ",
+      "offline": "ЭЭГ не подключена",
+      "offlineError": "Ошибка подключения (TG_Connect {code})",
+      "comMissing": "COM-порт Windows не найден",
+      "comMissingBleSeen": "Гарнитура видна по BLE, ждём serial-подключение",
+      "bleMissing": "Гарнитура не обнаружена по BLE",
+      "error": "Ошибка диагностики"
+    },
+    "panel": {
+      "title": "Диагностика ЭЭГ",
+      "checkNow": "Проверить сейчас",
+      "mac": "MAC-адрес",
+      "bleStatus": "BLE",
+      "bleReachable": "доступна",
+      "bleUnreachable": "недоступна",
+      "comPort": "COM-порт",
+      "comFound": "найден",
+      "comNotFound": "не найден",
+      "comDescription": "Описание порта",
+      "pnpDeviceId": "PNP Device ID",
+      "connectStage": "Стадия подключения",
+      "connectPort": "Активный порт",
+      "connectAttempts": "Попыток подключения",
+      "connectError": "Последняя ошибка SDK",
+      "sdkVersion": "Версия SDK",
+      "poorSignal": "Качество сигнала",
+      "lastSampleAge": "Последний семпл",
+      "sampleAgeSec": "{sec} с назад",
+      "lastCheck": "Последняя проверка",
+      "checkAgeSec": "{sec} с назад"
+    }
   }
 }

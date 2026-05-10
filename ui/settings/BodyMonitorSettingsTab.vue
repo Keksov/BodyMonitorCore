@@ -12,6 +12,9 @@
 <script setup lang="ts">
 import DeviceScanBlock from '../components/DeviceScanBlock.vue'
 import DeviceList from '../components/DeviceList.vue'
+import { useEegDiagnosticsPump } from '../composables/use-eeg-diagnostics-pump'
+
+useEegDiagnosticsPump()
 </script>
 
 <style scoped>

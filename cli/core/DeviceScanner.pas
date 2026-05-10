@@ -8,7 +8,7 @@ uses
     SysUtils,
     Classes,
     Windows,
-    SimpleBle,
+    SimpleCBle,
     LogCore,
     BleHelper,
     BleLogHelper,
@@ -19,6 +19,12 @@ const
     CONNECT_TIMEOUT_MS = 10000;
 
 type
+    PScanAddressMatchContext = ^TScanAddressMatchContext;
+    TScanAddressMatchContext = record
+        TargetAddress: string;
+        MatchFound: LongInt;
+    end;
+
     TScanFilterKind = (
         sfHeartRateService,
         sfAddress,
@@ -85,6 +91,13 @@ type
     private
         function    isCancelRequested(): Boolean;
         procedure   writeScanCancelled();
+        function    findExactAddressFilter(const aFilters: TScanFilterArray;
+            out aAddress: string): Boolean;
+        function    passesPreConnectFilters(const aFilters: TScanFilterArray;
+            const aDevice: TScannedDevice): Boolean;
+        function    scanUntilAddressFound(aAdapter: TSimpleBleAdapter;
+            const aAddress: string; aTimeoutMs: DWORD;
+            out aCancelled: Boolean): TSimpleBleErr;
         function    gattServiceNameByUuid(const aUuid: string): string;
         function    findComPortForMac(const aBleAddress: string;
             const aDevices: TSerialDeviceInfoArray): string;
@@ -104,6 +117,12 @@ type
         procedure   setCancelFlag(aCancelFlag: PLongInt);
         procedure   requestCancel();
 
+        function    pingAddress(const aAddress: string;
+            out aIdentifier: string): Boolean;
+
+        function    discover(aRetainPeripheralHandles: Boolean;
+            out aResult: TDeviceScanResult): Boolean;
+
         function    scan(const aFilters: TScanFilterArray;
             aFullScan: Boolean;
             aKeepFirstMatchedConnected: Boolean;
@@ -112,6 +131,36 @@ type
     end;
 
 implementation
+
+procedure scanAddressNoopCallback(aAdapter: TSimpleBleAdapter;
+    aPeripheral: TSimpleBlePeripheral; aUserData: Pointer); cdecl;
+begin
+end;
+
+procedure scanAddressMatchCallback(aAdapter: TSimpleBleAdapter;
+    aPeripheral: TSimpleBlePeripheral; aUserData: Pointer); cdecl;
+var
+    address: PChar;
+    context: PScanAddressMatchContext;
+begin
+    if (aPeripheral = 0) or (aUserData = nil) then
+        Exit;
+
+    context := PScanAddressMatchContext(aUserData);
+    if InterlockedCompareExchange(context^.MatchFound, 0, 0) <> 0 then
+        Exit;
+
+    address := SimpleBlePeripheralAddress(aPeripheral);
+    if address = nil then
+        Exit;
+
+    try
+        if LowerCase(Trim(string(address))) = context^.TargetAddress then
+            InterlockedExchange(context^.MatchFound, 1);
+    finally
+        SimpleBleFree(address);
+    end;
+end;
 
 {*******************************************************************************
 * Create
@@ -181,6 +230,311 @@ begin
 end;
 
 {*******************************************************************************
+* pingAddress
+*******************************************************************************}
+function TDeviceScanner.pingAddress(const aAddress: string;
+    out aIdentifier: string): Boolean;
+var
+    i: Integer;
+    scanErr: TSimpleBleErr;
+    errMsg: string;
+    targetAddress: string;
+    scanCancelled: Boolean;
+    adapter: TSimpleBleAdapter;
+    addrStr: string;
+    bleReady: Boolean;
+    identStr: string;
+    scanCount: NativeUInt;
+    address: PChar;
+    identifier: PChar;
+    peripheral: TSimpleBlePeripheral;
+begin
+    aIdentifier := '';
+    Result := False;
+    adapter := 0;
+    bleReady := False;
+    scanCancelled := False;
+    targetAddress := LowerCase(Trim(aAddress));
+
+    if targetAddress = '' then
+    begin
+        writeBleScanLine(Flogger, 'ping_start', 'error',
+            'ERROR: Empty ping target address.');
+        Exit;
+    end;
+
+    if not initBleAdapter(adapter, errMsg) then
+    begin
+        writeBleScanLine(Flogger, 'init', 'error', 'ERROR: ' + errMsg);
+        SimpleBleUnloadLibrary();
+        Exit;
+    end;
+    bleReady := True;
+
+    EnterCriticalSection(FscanLock);
+    try
+        FscanAdapter := adapter;
+    finally
+        LeaveCriticalSection(FscanLock);
+    end;
+
+    try
+        if isCancelRequested() then
+        begin
+            writeScanCancelled();
+            Exit;
+        end;
+
+        writeBleScanLine(Flogger, 'ping_start', 'info',
+            Format('Pinging BLE device [%s]...', [targetAddress]));
+
+        scanErr := scanUntilAddressFound(adapter, targetAddress,
+            SCAN_TIMEOUT_MS, scanCancelled);
+        if scanErr <> SIMPLEBLE_SUCCESS then
+        begin
+            if isCancelRequested() or scanCancelled then
+                writeScanCancelled()
+            else
+                writeBleScanLine(Flogger, 'ping_start', 'error',
+                    'ERROR: BLE ping scan failed.');
+            Exit;
+        end;
+
+        scanCount := SimpleBleAdapterScanGetResultsCount(adapter);
+        for i := 0 to scanCount - 1 do
+        begin
+            peripheral := SimpleBleAdapterScanGetResultsHandle(adapter, i);
+            identifier := SimpleBlePeripheralIdentifier(peripheral);
+            address := SimpleBlePeripheralAddress(peripheral);
+
+            if identifier <> nil then
+                identStr := string(identifier)
+            else
+                identStr := '';
+
+            if address <> nil then
+                addrStr := LowerCase(Trim(string(address)))
+            else
+                addrStr := '';
+
+            if identifier <> nil then
+                SimpleBleFree(identifier);
+            if address <> nil then
+                SimpleBleFree(address);
+
+            if addrStr = targetAddress then
+            begin
+                aIdentifier := identStr;
+                Result := True;
+                SimpleBlePeripheralReleaseHandle(peripheral);
+                Break;
+            end;
+
+            SimpleBlePeripheralReleaseHandle(peripheral);
+        end;
+
+        if Result then
+            writeBleScanLine(Flogger, 'ping_results', 'info',
+                Format('Device reachable: %s [%s]', [aIdentifier, targetAddress]))
+        else
+            writeBleScanLine(Flogger, 'ping_results', 'error',
+                Format('ERROR: Could not find device [%s].', [targetAddress]));
+    finally
+        EnterCriticalSection(FscanLock);
+        try
+            FscanAdapter := 0;
+            if adapter <> 0 then
+            begin
+                SimpleBleAdapterReleaseHandle(adapter);
+                adapter := 0;
+            end;
+        finally
+            LeaveCriticalSection(FscanLock);
+        end;
+
+        if bleReady then
+            SimpleBleUnloadLibrary();
+    end;
+end;
+
+{*******************************************************************************
+* discover
+*******************************************************************************}
+function TDeviceScanner.discover(aRetainPeripheralHandles: Boolean;
+    out aResult: TDeviceScanResult): Boolean;
+var
+    i: Integer;
+    scanErr: TSimpleBleErr;
+    errMsg: string;
+    paired: Boolean;
+    scanCancelled: Boolean;
+    adapter: TSimpleBleAdapter;
+    addrStr: string;
+    address: PChar;
+    bleReady: Boolean;
+    identStr: string;
+    scanCount: NativeUInt;
+    identifier: PChar;
+    peripheral: TSimpleBlePeripheral;
+    wmiDevices: TSerialDeviceInfoArray;
+    connectable: Boolean;
+    currentDevice: TScannedDevice;
+    hasRetainedHandles: Boolean;
+begin
+    FillChar(aResult, SizeOf(aResult), 0);
+    SetLength(aResult.Devices, 0);
+    aResult.FirstMatchedPeripheral := 0;
+    aResult.FirstMatchedMac := '';
+    aResult.FirstMatchedIdentifier := '';
+    aResult.BleLibraryLoaded := False;
+    adapter := 0;
+    bleReady := False;
+    hasRetainedHandles := False;
+    scanCancelled := False;
+    Result := False;
+
+    TBleComPortFinder.listAllSerialDevices(wmiDevices);
+
+    if not initBleAdapter(adapter, errMsg) then
+    begin
+        writeBleScanLine(Flogger, 'init', 'error', 'ERROR: ' + errMsg);
+        SimpleBleUnloadLibrary();
+        Exit;
+    end;
+    bleReady := True;
+
+    EnterCriticalSection(FscanLock);
+    try
+        FscanAdapter := adapter;
+    finally
+        LeaveCriticalSection(FscanLock);
+    end;
+
+    try
+        if isCancelRequested() then
+        begin
+            writeScanCancelled();
+            Exit;
+        end;
+
+        writeBleScanLine(Flogger, 'init', 'info',
+            Format('SimpleBLE version: %s', [string(SimpleBleGetVersion())]));
+
+        writeBleScanLine(Flogger, 'scan_start', 'info',
+            Format('Scanning for BLE devices (%d seconds)...', [SCAN_TIMEOUT_MS div 1000]));
+        scanErr := SimpleBleAdapterScanFor(adapter, SCAN_TIMEOUT_MS);
+        if scanErr <> SIMPLEBLE_SUCCESS then
+        begin
+            if isCancelRequested() then
+                writeScanCancelled()
+            else
+                writeBleScanLine(Flogger, 'scan_start', 'error',
+                    'ERROR: BLE scan failed.');
+            Exit;
+        end;
+
+        scanCount := SimpleBleAdapterScanGetResultsCount(adapter);
+        writeBleScanCountLine(Flogger, 'scan_results', 'info',
+            Format('Found %d BLE device(s).', [scanCount]), scanCount);
+
+        for i := 0 to scanCount - 1 do
+        begin
+            if isCancelRequested() then
+            begin
+                scanCancelled := True;
+                Break;
+            end;
+
+            Inc(aResult.FoundCount);
+            peripheral := SimpleBleAdapterScanGetResultsHandle(adapter, i);
+            identifier := SimpleBlePeripheralIdentifier(peripheral);
+            address := SimpleBlePeripheralAddress(peripheral);
+
+            if identifier <> nil then
+                identStr := string(identifier)
+            else
+                identStr := '';
+
+            if address <> nil then
+                addrStr := string(address)
+            else
+                addrStr := '';
+
+            if identifier <> nil then
+                SimpleBleFree(identifier);
+            if address <> nil then
+                SimpleBleFree(address);
+
+            writeBleScanLine(Flogger, 'scan_results', 'info',
+                Format('  [%d] %s [%s]', [i + 1, identStr, addrStr]));
+
+            connectable := False;
+            paired := False;
+            SimpleBlePeripheralIsConnectable(peripheral, connectable);
+            if connectable then
+                SimpleBlePeripheralIsPaired(peripheral, paired);
+
+            currentDevice.Index := i + 1;
+            currentDevice.Mac := addrStr;
+            currentDevice.Identifier := identStr;
+            currentDevice.DeviceType := 'unknown';
+            currentDevice.ComPort := findComPortForMac(addrStr, wmiDevices);
+            currentDevice.Peripheral := 0;
+            currentDevice.Connectable := connectable;
+            currentDevice.Connected := False;
+            currentDevice.MatchesFilters := True;
+            currentDevice.HasHeartRate := False;
+
+            if not connectable then
+                Inc(aResult.NotConnectableCount);
+
+            if aRetainPeripheralHandles then
+            begin
+                currentDevice.Peripheral := peripheral;
+                hasRetainedHandles := True;
+            end;
+
+            appendDevice(aResult.Devices, currentDevice);
+
+            if not aRetainPeripheralHandles then
+                SimpleBlePeripheralReleaseHandle(peripheral);
+        end;
+
+        if scanCancelled then
+        begin
+            writeScanCancelled();
+            Exit;
+        end;
+
+        writeBleScanCountLine(Flogger, 'scan_summary', 'info',
+            Format('Processed %d scanned device(s).', [aResult.FoundCount]),
+            aResult.FoundCount);
+
+        Result := True;
+    finally
+        EnterCriticalSection(FscanLock);
+        try
+            FscanAdapter := 0;
+            if adapter <> 0 then
+            begin
+                SimpleBleAdapterReleaseHandle(adapter);
+                adapter := 0;
+            end;
+        finally
+            LeaveCriticalSection(FscanLock);
+        end;
+
+        if bleReady then
+        begin
+            if aRetainPeripheralHandles and hasRetainedHandles then
+                aResult.BleLibraryLoaded := True
+            else
+                SimpleBleUnloadLibrary();
+        end;
+    end;
+end;
+
+{*******************************************************************************
 * isCancelRequested
 *******************************************************************************}
 function TDeviceScanner.isCancelRequested(): Boolean;
@@ -196,6 +550,144 @@ procedure TDeviceScanner.writeScanCancelled();
 begin
     writeBleScanLine(Flogger, 'scan_cancelled', 'info',
         'BLE scan cancelled.');
+end;
+
+{*******************************************************************************
+* findExactAddressFilter
+*******************************************************************************}
+function TDeviceScanner.findExactAddressFilter(const aFilters: TScanFilterArray;
+    out aAddress: string): Boolean;
+var
+    i: Integer;
+begin
+    aAddress := '';
+    for i := 0 to Length(aFilters) - 1 do
+    begin
+        if aFilters[i].Kind <> sfAddress then
+            Continue;
+
+        aAddress := LowerCase(Trim(aFilters[i].Value));
+        Result := aAddress <> '';
+        Exit;
+    end;
+
+    Result := False;
+end;
+
+{*******************************************************************************
+* passesPreConnectFilters
+*******************************************************************************}
+function TDeviceScanner.passesPreConnectFilters(const aFilters: TScanFilterArray;
+    const aDevice: TScannedDevice): Boolean;
+var
+    i: Integer;
+    v: string;
+begin
+    Result := True;
+    for i := 0 to Length(aFilters) - 1 do
+    begin
+        case aFilters[i].Kind of
+            sfAddress:
+            begin
+                v := LowerCase(Trim(aFilters[i].Value));
+                if (v <> '') and (LowerCase(Trim(aDevice.Mac)) <> v) then
+                    Exit(False);
+            end;
+            sfName:
+            begin
+                v := LowerCase(aFilters[i].Value);
+                if (v <> '') and (Pos(v, LowerCase(aDevice.Identifier)) = 0) then
+                    Exit(False);
+            end;
+        else
+            Continue;
+        end;
+    end;
+end;
+
+{*******************************************************************************
+* scanUntilAddressFound
+*******************************************************************************}
+function TDeviceScanner.scanUntilAddressFound(aAdapter: TSimpleBleAdapter;
+    const aAddress: string; aTimeoutMs: DWORD;
+    out aCancelled: Boolean): TSimpleBleErr;
+var
+    active: Boolean;
+    callbackErr: TSimpleBleErr;
+    context: TScanAddressMatchContext;
+    startedAt: QWord;
+    stopWaitStartedAt: QWord;
+begin
+    aCancelled := False;
+    context.TargetAddress := LowerCase(Trim(aAddress));
+    context.MatchFound := 0;
+
+    Result := SimpleBleAdapterSetCallbackOnScanFound(aAdapter,
+        @scanAddressMatchCallback, @context);
+    if Result <> SIMPLEBLE_SUCCESS then
+        Exit;
+
+    callbackErr := SimpleBleAdapterSetCallbackOnScanUpdated(aAdapter,
+        @scanAddressMatchCallback, @context);
+    if callbackErr <> SIMPLEBLE_SUCCESS then
+    begin
+        SimpleBleAdapterSetCallbackOnScanFound(aAdapter,
+            @scanAddressNoopCallback, nil);
+        Exit(callbackErr);
+    end;
+
+    Result := SimpleBleAdapterScanStart(aAdapter);
+    if Result <> SIMPLEBLE_SUCCESS then
+    begin
+        SimpleBleAdapterSetCallbackOnScanUpdated(aAdapter,
+            @scanAddressNoopCallback, nil);
+        SimpleBleAdapterSetCallbackOnScanFound(aAdapter,
+            @scanAddressNoopCallback, nil);
+        Exit;
+    end;
+
+    startedAt := GetTickCount64();
+
+    while True do
+    begin
+        if isCancelRequested() then
+        begin
+            aCancelled := True;
+            SimpleBleAdapterScanStop(aAdapter);
+            Exit(SIMPLEBLE_FAILURE);
+        end;
+
+        if (InterlockedCompareExchange(context.MatchFound, 0, 0) <> 0) or
+            (GetTickCount64() - startedAt >= QWord(aTimeoutMs)) then
+            Break;
+
+        Sleep(50);
+    end;
+
+    Result := SimpleBleAdapterScanStop(aAdapter);
+    SimpleBleAdapterSetCallbackOnScanUpdated(aAdapter,
+        @scanAddressNoopCallback, nil);
+    SimpleBleAdapterSetCallbackOnScanFound(aAdapter,
+        @scanAddressNoopCallback, nil);
+    if Result <> SIMPLEBLE_SUCCESS then
+        Exit;
+
+    active := True;
+    stopWaitStartedAt := GetTickCount64();
+    while active do
+    begin
+        if SimpleBleAdapterScanIsActive(aAdapter, active) <> SIMPLEBLE_SUCCESS then
+            Break;
+
+        if active then
+        begin
+            if GetTickCount64() - stopWaitStartedAt >= 5000 then
+                Break;
+            Sleep(25);
+        end;
+    end;
+
+    Result := SIMPLEBLE_SUCCESS;
 end;
 
 {*******************************************************************************
@@ -489,6 +981,7 @@ var
     scanErr: TSimpleBleErr;
     msg: string;
     errMsg: string;
+    exactAddressFilter: string;
     paired: Boolean;
     scanCancelled: Boolean;
     adapter: TSimpleBleAdapter;
@@ -504,6 +997,7 @@ var
     connectable: Boolean;
     connectedNow: Boolean;
     currentDevice: TScannedDevice;
+    hasExactAddressFilter: Boolean;
     hasRetainedHandles: Boolean;
 begin
     FillChar(aResult, SizeOf(aResult), 0);
@@ -516,9 +1010,14 @@ begin
     bleReady := False;
     hasRetainedHandles := False;
     scanCancelled := False;
+    hasExactAddressFilter := (not aFullScan) and
+        findExactAddressFilter(aFilters, exactAddressFilter);
     Result := False;
 
-    TBleComPortFinder.listAllSerialDevices(wmiDevices);
+    if not hasExactAddressFilter then
+        TBleComPortFinder.listAllSerialDevices(wmiDevices)
+    else
+        SetLength(wmiDevices, 0);
 
     if not initBleAdapter(adapter, errMsg) then
     begin
@@ -548,7 +1047,11 @@ begin
 
         writeBleScanLine(Flogger, 'scan_start', 'info',
             Format('Scanning for BLE devices (%d seconds)...', [SCAN_TIMEOUT_MS div 1000]));
-        scanErr := SimpleBleAdapterScanFor(adapter, SCAN_TIMEOUT_MS);
+        if hasExactAddressFilter then
+            scanErr := scanUntilAddressFound(adapter, exactAddressFilter,
+                SCAN_TIMEOUT_MS, scanCancelled)
+        else
+            scanErr := SimpleBleAdapterScanFor(adapter, SCAN_TIMEOUT_MS);
         if scanErr <> SIMPLEBLE_SUCCESS then
         begin
             if isCancelRequested() then
@@ -578,10 +1081,18 @@ begin
             peripheral := SimpleBleAdapterScanGetResultsHandle(adapter, i);
             identifier := SimpleBlePeripheralIdentifier(peripheral);
             address := SimpleBlePeripheralAddress(peripheral);
-            identStr := string(identifier);
-            addrStr := string(address);
-            SimpleBleFree(identifier);
-            SimpleBleFree(address);
+            if identifier <> nil then
+                identStr := string(identifier)
+            else
+                identStr := '';
+            if address <> nil then
+                addrStr := string(address)
+            else
+                addrStr := '';
+            if identifier <> nil then
+                SimpleBleFree(identifier);
+            if address <> nil then
+                SimpleBleFree(address);
 
             writeBleScanLine(Flogger, 'scan_results', 'info',
                 Format('  [%d] %s [%s]', [i + 1, identStr, addrStr]));
@@ -596,6 +1107,15 @@ begin
             currentDevice.Connected := False;
             currentDevice.MatchesFilters := False;
             currentDevice.HasHeartRate := False;
+            currentDevice.ComPort := findComPortForMac(addrStr, wmiDevices);
+
+            if not passesPreConnectFilters(aFilters, currentDevice) then
+            begin
+                Inc(aResult.SkippedByFilterCount);
+                appendDevice(aResult.Devices, currentDevice);
+                SimpleBlePeripheralReleaseHandle(peripheral);
+                Continue;
+            end;
 
             connectedNow := False;
             connectable := False;
@@ -646,7 +1166,6 @@ begin
                     Format('  Not connectable: %s [%s]', [identStr, addrStr]));
             end;
 
-            currentDevice.ComPort := findComPortForMac(addrStr, wmiDevices);
             currentDevice.MatchesFilters := deviceMatchesFilters(aFilters, currentDevice);
 
             if (Length(aFilters) > 0) and (not currentDevice.MatchesFilters) then

@@ -5,7 +5,7 @@ unit BleHelper;
 interface
 
 uses
-    SimpleBle;
+    SimpleCBle;
 
 const
     HR_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
@@ -30,7 +30,7 @@ begin
 
     if not SimpleBleLoadLibrary() then
     begin
-        aErrMsg := 'Failed to load SimpleBLE library (simpleble-c.dll).';
+        aErrMsg := 'Failed to load SimpleBLE library (simplecble.dll).';
         Exit;
     end;
 

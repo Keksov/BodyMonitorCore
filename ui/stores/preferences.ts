@@ -1,17 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-export type EegDisplayMode = 'lines' | 'subpanels' | 'stacked' | 'heatmap' | 'radar' | 'bands'
-export type EegBandScaleMode = 'normalized' | 'absolute'
+export type EegDisplayMode = 'radar' | 'bands'
+export type EegBandScaleMode = 'raw' | 'normalized' | 'calibrated'
 
 const EEG_MODE_KEY = 'eegDisplayMode'
 const EEG_BAND_WINDOW_SEC_KEY = 'eegBandWindowSec'
 const EEG_BAND_SCALE_MODE_KEY = 'eegBandScaleMode'
-const EEG_MODE_DEFAULT: EegDisplayMode = 'lines'
+const EEG_MODE_DEFAULT: EegDisplayMode = 'bands'
 const EEG_BAND_WINDOW_SEC_DEFAULT = 10
-const EEG_BAND_SCALE_MODE_DEFAULT: EegBandScaleMode = 'normalized'
-const VALID_EEG_MODES: readonly EegDisplayMode[] = ['lines', 'subpanels', 'stacked', 'heatmap', 'radar', 'bands']
-const VALID_EEG_BAND_SCALE_MODES: readonly EegBandScaleMode[] = ['normalized', 'absolute']
+const EEG_BAND_SCALE_MODE_DEFAULT: EegBandScaleMode = 'raw'
+const VALID_EEG_MODES: readonly EegDisplayMode[] = ['bands', 'radar']
+const VALID_EEG_BAND_SCALE_MODES: readonly EegBandScaleMode[] = ['raw', 'normalized', 'calibrated']
 
 function sanitizeEegBandWindowSec(value: unknown): number {
   const parsed = typeof value === 'number'
@@ -42,6 +42,10 @@ function readStoredEegBandWindowSec(): number {
 
 function readStoredEegBandScaleMode(): EegBandScaleMode {
   const stored = localStorage.getItem(EEG_BAND_SCALE_MODE_KEY)
+  if (stored === 'absolute') {
+    return 'raw'
+  }
+
   if (stored !== null && (VALID_EEG_BAND_SCALE_MODES as readonly string[]).includes(stored)) {
     return stored as EegBandScaleMode
   }

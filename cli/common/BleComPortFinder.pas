@@ -32,6 +32,8 @@ type
     TBleComPortFinder = class
     public
         class function findComPortByBleMacAddress(const aBleMacAddress: string): string;
+        class function findSerialDeviceByBleMacAddress(const aBleMacAddress: string;
+            out aDevice: TSerialDeviceInfo): Boolean;
         class function findComPortByDeviceName(const aDeviceName: string): string;
         class function listAllSerialDevices(out aDevices: TSerialDeviceInfoArray): Boolean;
     end;
@@ -139,6 +141,36 @@ begin
         if Pos(upperBleMac, UpperCase(devices[i].PNPDeviceID)) > 0 then
         begin
             Result := devices[i].DeviceID;
+            Exit;
+        end;
+    end;
+end;
+
+{*******************************************************************************
+* findSerialDeviceByBleMacAddress
+*   Searches Win32_SerialPort for a device with BLE MAC in its PNPDeviceID.
+*   Returns True if found; fills aDevice with device info.
+*******************************************************************************}
+class function TBleComPortFinder.findSerialDeviceByBleMacAddress(
+    const aBleMacAddress: string; out aDevice: TSerialDeviceInfo): Boolean;
+var
+    i: Integer;
+    devices: TSerialDeviceInfoArray;
+    upperBleMac: string;
+begin
+    Result := False;
+    FillChar(aDevice, SizeOf(aDevice), 0);
+    upperBleMac := UpperCase(StringReplace(aBleMacAddress, ':', '', [rfReplaceAll]));
+
+    if not listAllSerialDevices(devices) then
+        Exit;
+
+    for i := 0 to Length(devices) - 1 do
+    begin
+        if Pos(upperBleMac, UpperCase(devices[i].PNPDeviceID)) > 0 then
+        begin
+            aDevice := devices[i];
+            Result := True;
             Exit;
         end;
     end;

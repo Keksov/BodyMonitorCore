@@ -62,7 +62,12 @@ function copyCmd() {
 }
 
 const progressText = computed(() => {
-  const elapsed = session.scanStatus?.elapsedSec ?? 0
+  const status = session.scanStatus
+  if (status?.key === 'progress' && status.translationKey) {
+    return t(status.translationKey, status.translationParams ?? {})
+  }
+
+  const elapsed = status?.elapsedSec ?? 0
   return t('settings.statusProgress', { seconds: elapsed })
 })
 

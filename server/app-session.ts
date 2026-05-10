@@ -1,5 +1,6 @@
 import { ProcessManager } from "./process-manager"
 import type { ProcessManagerCallbacks, ProcessStateSnapshot, StartResult } from "./process-manager"
+import type { BodyMonitorEegDiagnosticsEvent, BodyMonitorPingResultEvent } from "./protocol"
 
 export type ManagedAppKind = "bodymonitor" | "gnaural"
 
@@ -9,6 +10,8 @@ export interface AppSession {
   stop(): Promise<boolean>
   startServer(aCallbacks: ProcessManagerCallbacks, aKeepAliveSec?: number, aInitBle?: boolean): Promise<StartResult>
   sendServerListDevices(): void
+  pingDevice(aMac: string): Promise<BodyMonitorPingResultEvent>
+  diagnoseEeg(aMac: string): Promise<BodyMonitorEegDiagnosticsEvent>
   sendStdioConfigure(aParams: readonly string[]): void
   sendStdioStart(): void
   sendStdioStop(): void

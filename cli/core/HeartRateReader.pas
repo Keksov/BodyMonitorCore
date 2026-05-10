@@ -7,7 +7,7 @@ interface
 uses
     SysUtils,
     Windows,
-    SimpleBle,
+    SimpleCBle,
     LogCore,
     BreathPhaseDetector,
     BleHelper,
@@ -113,13 +113,13 @@ end;
 * heartRateDisconnectedCallback
 *******************************************************************************}
 procedure heartRateDisconnectedCallback(aPeripheral: TSimpleBlePeripheral;
-    aUserData: PPointer);
+    aUserData: Pointer); cdecl;
 var
     reader: THeartRateReader;
 begin
     reader := nil;
     if aUserData <> nil then
-        reader := THeartRateReader(Pointer(aUserData));
+        reader := THeartRateReader(aUserData);
 
     if reader <> nil then
         reader.reportPeripheralDisconnected();
@@ -128,7 +128,9 @@ end;
 {*******************************************************************************
 * heartRateNotifyCallback
 *******************************************************************************}
-procedure heartRateNotifyCallback(aService: TSimpleBleUuid; aCharacteristic: TSimpleBleUuid; aData: PByte; aDataLength: NativeUInt; aUserData: PPointer);
+procedure heartRateNotifyCallback(aPeripheral: TSimpleBlePeripheral;
+    aService: TSimpleBleUuid; aCharacteristic: TSimpleBleUuid; aData: PByte;
+    aDataLength: NativeUInt; aUserData: Pointer); cdecl;
 var
     eventJson: string;
     rrMs: Double;
@@ -143,12 +145,15 @@ var
     currentTimestamp: string;
     reader: THeartRateReader;
 begin
+    if aPeripheral = 0 then
+        Exit;
+
     if (aData = nil) or (aDataLength < 2) then
         Exit;
 
     reader := nil;
     if aUserData <> nil then
-        reader := THeartRateReader(Pointer(aUserData));
+        reader := THeartRateReader(aUserData);
 
     flags := aData[0];
     offset := 1;
@@ -324,6 +329,8 @@ var
 begin
     macText := '';
     idText := '';
+    macPtr := nil;
+    idPtr := nil;
 
     if Fperipheral <> 0 then
     begin
@@ -334,6 +341,11 @@ begin
             macText := string(macPtr);
         if idPtr <> nil then
             idText := string(idPtr);
+
+        if macPtr <> nil then
+            SimpleBleFree(macPtr);
+        if idPtr <> nil then
+            SimpleBleFree(idPtr);
     end;
 
     EnterCriticalSection(FstateLock);
@@ -354,7 +366,7 @@ begin
         Exit;
 
     SimpleBlePeripheralSetCallbackOnDisconnected(Fperipheral,
-        @heartRateDisconnectedCallback, PPointer(Self));
+        @heartRateDisconnectedCallback, Self);
 end;
 
 {*******************************************************************************
@@ -616,7 +628,9 @@ begin
         begin
             if LowerCase(uuidToString(service.Characteristics[j].Uuid)) = HR_CHAR_UUID then
             begin
-                if SimpleBlePeripheralNotify(Fperipheral, service.Uuid, service.Characteristics[j].Uuid, @heartRateNotifyCallback, PPointer(Self)) = SIMPLEBLE_SUCCESS then
+                if SimpleBlePeripheralNotify(Fperipheral, service.Uuid,
+                    service.Characteristics[j].Uuid, @heartRateNotifyCallback,
+                    Self) = SIMPLEBLE_SUCCESS then
                 begin
                     writeBleScanLine(Flogger, 'subscribe', 'info',
                         'Subscribed to Heart Rate notifications.');

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sleep Drowse-In Schedule (60 s)
+  ===============================
+  Purpose: encourage drowsiness via theta -> delta binaural beats.
+
+  Notes:
+  - Beat sweep: 6 Hz (theta) -> 3 Hz (delta) -> 6 Hz over one minute.
+  - Carrier: 120 Hz binaural voice, intended for headphones.
+  - Pink noise is a quiet ambient mask (warmer than alpha preset).
+  - First and last entry of each voice match so repeated loops stay seamless.
+
+  Safe edits:
+  - Change <loops> for whole-minute duration.
+  - Keep first and last entry identical inside each voice.
+  - Keep beatfreq in 1..7 to stay inside theta/delta range.
+-->
+<gnaural>
+  <title>Sleep Drowse-In 60s</title>
+  <author>MindWave</author>
+  <schedule_description>Theta to delta sweep 6 Hz to 3 Hz to 6 Hz with gentle fade in and out.</schedule_description>
+  <loops>1</loops>
+  <overallvolume_left>0.80</overallvolume_left>
+  <overallvolume_right>0.80</overallvolume_right>
+  <stereoswap>0</stereoswap>
+
+  <voice>
+    <id>1</id>
+    <type>0</type>
+    <description>Binaural carrier 120 Hz</description>
+    <voice_mute>0</voice_mute>
+    <voice_mono>0</voice_mono>
+    <mindwave_hidden>0</mindwave_hidden>
+    <mindwave_color>#5e81ac</mindwave_color>
+    <entries>
+      <entry duration="8" basefreq="120" beatfreq="6" volume_left="0.00" volume_right="0.00"/>
+      <entry duration="14" basefreq="120" beatfreq="5" volume_left="0.40" volume_right="0.40"/>
+      <entry duration="16" basefreq="120" beatfreq="3" volume_left="0.50" volume_right="0.50"/>
+      <entry duration="14" basefreq="120" beatfreq="4" volume_left="0.40" volume_right="0.40"/>
+      <entry duration="8" basefreq="120" beatfreq="6" volume_left="0.00" volume_right="0.00"/>
+    </entries>
+  </voice>
+
+  <voice>
+    <id>2</id>
+    <type>1</type>
+    <description>Pink noise ambience</description>
+    <voice_mute>0</voice_mute>
+    <voice_mono>1</voice_mono>
+    <mindwave_hidden>0</mindwave_hidden>
+    <mindwave_color>#3b4252</mindwave_color>
+    <entries>
+      <entry duration="10" basefreq="0" beatfreq="0" volume_left="0.00" volume_right="0.00"/>
+      <entry duration="40" basefreq="0" beatfreq="0" volume_left="0.16" volume_right="0.16"/>
+      <entry duration="10" basefreq="0" beatfreq="0" volume_left="0.00" volume_right="0.00"/>
+    </entries>
+  </voice>
+</gnaural>

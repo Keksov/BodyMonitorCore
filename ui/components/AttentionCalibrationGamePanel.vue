@@ -143,7 +143,7 @@
             class="attention-calibration-panel__eeg-chart"
             :data="activeChartData"
             :window-sec="1"
-            scale-mode="normalized"
+            data-correction="raw"
             :force-no-signal="isDeviceOffline"
             :empty-hint-text="chartEmptyHintText"
             compact

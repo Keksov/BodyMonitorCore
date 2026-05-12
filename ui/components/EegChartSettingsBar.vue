@@ -56,9 +56,9 @@
 
     <q-separator vertical color="grey-7" class="q-mx-sm self-stretch" />
 
-    <!-- Scale -->
+    <!-- Data correction -->
     <div v-if="dataSource !== 'algo-bp'" class="col-auto row items-center q-gutter-xs no-wrap">
-      <span class="text-caption text-grey-5 eeg-chart-settings-bar__label">{{ $t('monitoring.eegScaleLabel') }}</span>
+      <span class="text-caption text-grey-5 eeg-chart-settings-bar__label">{{ $t('monitoring.eegDataCorrectionLabel') }}</span>
       <q-select
         dense
         outlined
@@ -67,9 +67,9 @@
         emit-value
         map-options
         class="eeg-chart-settings-bar__scale-select"
-        :model-value="scaleMode"
-        :options="scaleOptions"
-        @update:model-value="handleScaleChange"
+        :model-value="dataCorrection"
+        :options="dataCorrectionOptions"
+        @update:model-value="handleDataCorrectionChange"
       >
         <template #option="scope">
           <div
@@ -131,20 +131,16 @@
             </li>
           </ul>
 
-          <div class="text-subtitle2 text-primary q-mb-xs">{{ $t('monitoring.eegScaleLabel') }}</div>
-          <div class="text-body2 text-grey-4 q-mb-sm">{{ $t('monitoring.eegSettingsHelp.scaleIntro') }}</div>
+          <div class="text-subtitle2 text-primary q-mb-xs">{{ $t('monitoring.eegDataCorrectionLabel') }}</div>
+          <div class="text-body2 text-grey-4 q-mb-sm">{{ $t('monitoring.eegSettingsHelp.correctionIntro') }}</div>
           <ul class="q-mt-none eeg-chart-settings-bar__help-list text-body2">
             <li class="q-mb-xs">
-              <span class="text-weight-medium">{{ $t('monitoring.bandScale.raw') }}</span>
-              &nbsp;&mdash; {{ $t('monitoring.eegSettingsHelp.scaleRaw') }}
-            </li>
-            <li class="q-mb-xs">
-              <span class="text-weight-medium">{{ $t('monitoring.bandScale.normalized') }}</span>
-              &nbsp;&mdash; {{ $t('monitoring.eegSettingsHelp.scaleNormalized') }}
+              <span class="text-weight-medium">{{ $t('monitoring.dataCorrection.raw') }}</span>
+              &nbsp;&mdash; {{ $t('monitoring.eegSettingsHelp.correctionRaw') }}
             </li>
             <li>
-              <span class="text-weight-medium">{{ $t('monitoring.bandScale.calibrated') }}</span>
-              &nbsp;&mdash; {{ $t('monitoring.eegSettingsHelp.scaleCalibrated') }}
+              <span class="text-weight-medium">{{ $t('monitoring.dataCorrection.calibrated') }}</span>
+              &nbsp;&mdash; {{ $t('monitoring.eegSettingsHelp.correctionCalibrated') }}
             </li>
           </ul>
         </q-card-section>
@@ -156,11 +152,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
+import type { EegDataCorrection, EegDataSource } from '../stores/preferences'
 
 const props = defineProps<{
   readonly windowSec: number
-  readonly scaleMode: EegBandScaleMode
+  readonly dataCorrection: EegDataCorrection
   readonly canUseCalibrated: boolean
   readonly calibratedTooltip?: string | null
   readonly dataSource: EegDataSource
@@ -168,7 +164,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:windowSec', value: number): void
-  (e: 'update:scaleMode', value: EegBandScaleMode): void
+  (e: 'update:dataCorrection', value: EegDataCorrection): void
   (e: 'update:dataSource', value: EegDataSource): void
 }>()
 
@@ -188,16 +184,15 @@ const windowPresetOptions = computed(() => [
   { value: 'custom' as const, label: t('monitoring.eegWindow.custom') },
 ])
 
-interface ScaleOption {
-  value: EegBandScaleMode
+interface DataCorrectionOption {
+  value: EegDataCorrection
   label: string
   disable?: boolean
 }
 
-const scaleOptions = computed<ScaleOption[]>(() => [
-  { value: 'raw', label: t('monitoring.bandScale.raw') },
-  { value: 'normalized', label: t('monitoring.bandScale.normalized') },
-  { value: 'calibrated', label: t('monitoring.bandScale.calibrated'), disable: !props.canUseCalibrated },
+const dataCorrectionOptions = computed<DataCorrectionOption[]>(() => [
+  { value: 'raw', label: t('monitoring.dataCorrection.raw') },
+  { value: 'calibrated', label: t('monitoring.dataCorrection.calibrated'), disable: !props.canUseCalibrated },
 ])
 
 function isNumericPreset(v: number): v is NumericPreset {
@@ -247,8 +242,8 @@ function handleCustomInputChange(value: string | number | null) {
   emit('update:windowSec', validated)
 }
 
-function handleScaleChange(value: EegBandScaleMode): void {
-  emit('update:scaleMode', value)
+function handleDataCorrectionChange(value: EegDataCorrection): void {
+  emit('update:dataCorrection', value)
 }
 
 function handleDataSourceChange(value: EegDataSource): void {

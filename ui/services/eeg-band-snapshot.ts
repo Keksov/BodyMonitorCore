@@ -192,17 +192,6 @@ export function buildAlgoBpSnapshot(
   }
 }
 
-export function normalizeBandDistribution(rawBandValues: EegBandValues): EegBandValues {
-  const totalValue = Object.values(rawBandValues).reduce((sum, value) => sum + value, 0)
-  if (totalValue <= 0) {
-    return Object.fromEntries(EEG_BAND_KEYS.map((bandKey) => [bandKey, 0])) as EegBandValues
-  }
-
-  return Object.fromEntries(
-    EEG_BAND_KEYS.map((bandKey) => [bandKey, (rawBandValues[bandKey] / totalValue) * 100]),
-  ) as EegBandValues
-}
-
 export function calibrateBandValues(
   rawBandValues: EegBandValues,
   bandMin: Record<EegBandKey, number>,

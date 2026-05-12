@@ -79,12 +79,12 @@
             <div v-if="hasEegData" class="col-auto row items-center q-gutter-sm">
               <eeg-chart-settings-bar
                 :window-sec="preferences.eegBandWindowSec"
-                :scale-mode="preferences.eegBandScaleMode"
-                :can-use-calibrated="canUseCalibratedScale"
+                :data-correction="preferences.eegDataCorrection"
+                :can-use-calibrated="canUseCalibratedCorrection"
                 :calibrated-tooltip="calibratedUnavailableMessage"
                 :data-source="preferences.eegDataSource"
                 @update:window-sec="updateBandWindowSec"
-                @update:scale-mode="preferences.eegBandScaleMode = $event"
+                @update:data-correction="preferences.eegDataCorrection = $event"
                 @update:data-source="preferences.eegDataSource = $event"
               />
 
@@ -93,7 +93,7 @@
               </q-chip>
 
               <q-chip
-                v-if="!canUseCalibratedScale"
+                v-if="!canUseCalibratedCorrection"
                 dense
                 color="warning"
                 text-color="black"
@@ -102,7 +102,7 @@
               </q-chip>
 
               <q-chip
-                v-if="canUseCalibratedScale && preferences.eegBandScaleMode === 'calibrated'"
+                v-if="canUseCalibratedCorrection && preferences.eegDataCorrection === 'calibrated'"
                 dense
                 color="blue-grey-8"
                 text-color="blue-grey-2"
@@ -130,7 +130,7 @@
                       class="monitoring-page__chart"
                       :data="activeChartData"
                       :window-sec="preferences.eegBandWindowSec"
-                      :scale-mode="preferences.eegBandScaleMode"
+                      :data-correction="preferences.eegDataCorrection"
                       :calibration-profile="activeEegCalibrationProfile"
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                       :force-no-signal="isSelectedEegOffline"
@@ -144,7 +144,7 @@
                       :data="activeChartData"
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                       :window-sec="preferences.eegBandWindowSec"
-                      :scale-mode="preferences.eegBandScaleMode"
+                      :data-correction="preferences.eegDataCorrection"
                       :calibration-profile="activeEegCalibrationProfile"
                       :data-source="preferences.eegDataSource"
                     />
@@ -190,7 +190,7 @@
                 class="monitoring-page__chart"
                 :data="activeChartData"
                 :window-sec="preferences.eegBandWindowSec"
-                :scale-mode="preferences.eegBandScaleMode"
+                :data-correction="preferences.eegDataCorrection"
                 :calibration-profile="activeEegCalibrationProfile"
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                 :force-no-signal="isSelectedEegOffline"
@@ -204,7 +204,7 @@
                 :data="activeChartData"
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                 :window-sec="preferences.eegBandWindowSec"
-                :scale-mode="preferences.eegBandScaleMode"
+                :data-correction="preferences.eegDataCorrection"
                 :calibration-profile="activeEegCalibrationProfile"
                 :data-source="preferences.eegDataSource"
               />
@@ -352,7 +352,7 @@ const missingCalibrationModesLabel = computed(() => {
   return modes.join(', ')
 })
 
-const canUseCalibratedScale = computed(() => {
+const canUseCalibratedCorrection = computed(() => {
   return activeEegCalibrationProfile.value?.isComplete === true
 })
 
@@ -498,9 +498,9 @@ const rangeLabel = computed(() => {
   return `${formatter.format(new Date(snapshot.minTimestampMs))} - ${formatter.format(new Date(snapshot.maxTimestampMs))}`
 })
 
-watch(canUseCalibratedScale, (isAvailable) => {
-  if (!isAvailable && preferences.eegBandScaleMode === 'calibrated') {
-    preferences.eegBandScaleMode = 'raw'
+watch(canUseCalibratedCorrection, (isAvailable) => {
+  if (!isAvailable && preferences.eegDataCorrection === 'calibrated') {
+    preferences.eegDataCorrection = 'raw'
   }
 }, { immediate: true })
 

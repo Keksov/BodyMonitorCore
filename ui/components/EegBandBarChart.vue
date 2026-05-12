@@ -15,13 +15,12 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot, LogChartSeriesKey } from '@protocol'
 import type { EegCalibrationProfile } from '../stores/device'
-import type { EegBandScaleMode } from '../stores/preferences'
+import type { EegDataCorrection } from '../stores/preferences'
 import {
   EEG_BAND_KEYS,
   type EegBandKey,
   buildEegBandAveragesSnapshot,
   calibrateBandValues,
-  normalizeBandDistribution,
 } from '../services/eeg-band-snapshot'
 import { EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
@@ -30,7 +29,7 @@ use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, Canv
 const props = withDefaults(defineProps<{
   readonly data: LogChartDataSnapshot
   readonly windowSec: number
-  readonly scaleMode: EegBandScaleMode
+  readonly dataCorrection: EegDataCorrection
   readonly calibrationProfile?: EegCalibrationProfile | null
   readonly anchorTimestampMs?: number | null
 }>(), {
@@ -43,7 +42,7 @@ const chartRoot = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
-const normalizedValueFormatter = new Intl.NumberFormat(undefined, {
+const percentValueFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 })
@@ -106,11 +105,7 @@ const chartSnapshot = computed(() => {
   const rawBandValues = bandSnapshot.bandValues
 
   let bandValues = rawBandValues
-  if (props.scaleMode === 'normalized') {
-    bandValues = normalizeBandDistribution(rawBandValues)
-  }
-
-  if (props.scaleMode === 'calibrated' && props.calibrationProfile?.isComplete === true) {
+  if (props.dataCorrection === 'calibrated' && props.calibrationProfile?.isComplete === true) {
     bandValues = calibrateBandValues(
       rawBandValues,
       props.calibrationProfile.deviceWideMin,
@@ -146,8 +141,8 @@ const signalBadgeColor = computed(() => {
 })
 
 function formatBandValue(value: number): string {
-  if (props.scaleMode === 'normalized' || props.scaleMode === 'calibrated') {
-    return `${normalizedValueFormatter.format(value)}%`
+  if (props.dataCorrection === 'calibrated') {
+    return `${percentValueFormatter.format(value)}%`
   }
 
   return absoluteValueFormatter.format(value)
@@ -159,7 +154,7 @@ function formatScoreValue(value: number): string {
 
 function buildOption() {
   const snapshot = chartSnapshot.value
-  const isPercentScale = props.scaleMode === 'normalized' || props.scaleMode === 'calibrated'
+  const isPercentScale = props.dataCorrection === 'calibrated'
   const categories = EEG_BAND_KEYS.map((key) => t(`monitoring.series.${key}`))
   const bandSeriesData = EEG_BAND_KEYS.map((key) => ({
     value: snapshot?.bandValues[key] ?? 0,
@@ -218,7 +213,7 @@ function buildOption() {
       {
         type: 'value',
         name: isPercentScale
-          ? (props.scaleMode === 'calibrated' ? t('monitoring.axis.eegCalibrated') : t('monitoring.axis.eegPct'))
+          ? t('monitoring.axis.eegCalibrated')
           : t('monitoring.axis.eegPower'),
         min: 0,
         max: isPercentScale ? 100 : undefined,
@@ -303,7 +298,7 @@ onMounted(() => {
 watch([
   () => props.data,
   () => props.windowSec,
-  () => props.scaleMode,
+  () => props.dataCorrection,
   () => props.calibrationProfile,
   () => props.anchorTimestampMs,
 ], renderChart)

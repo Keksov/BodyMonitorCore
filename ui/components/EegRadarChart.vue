@@ -14,7 +14,7 @@ import { RadarChart } from 'echarts/charts'
 import { RadarComponent, TooltipComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
-import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
+import type { EegDataCorrection, EegDataSource } from '../stores/preferences'
 import type { EegCalibrationProfile } from '../stores/device'
 import {
   ALGO_BP_KEYS,
@@ -23,7 +23,6 @@ import {
   buildAlgoBpSnapshot,
   buildEegBandAveragesSnapshot,
   calibrateBandValues,
-  normalizeBandDistribution,
   getLatestSeriesValue,
 } from '../services/eeg-band-snapshot'
 import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
@@ -34,13 +33,13 @@ const props = withDefaults(defineProps<{
   readonly data: LogChartDataSnapshot
   readonly anchorTimestampMs?: number | null
   readonly windowSec?: number
-  readonly scaleMode?: EegBandScaleMode
+  readonly dataCorrection?: EegDataCorrection
   readonly calibrationProfile?: EegCalibrationProfile | null
   readonly dataSource?: EegDataSource
 }>(), {
   anchorTimestampMs: null,
   windowSec: 30,
-  scaleMode: 'normalized',
+  dataCorrection: 'raw',
   calibrationProfile: null,
   dataSource: 'bands',
 })
@@ -306,8 +305,8 @@ function buildRadarSectorGraphics(values: readonly number[], axisMin: number, ax
   })
 }
 
-const effectiveScaleMode = computed<EegBandScaleMode>(() => {
-  if (props.scaleMode !== 'calibrated') return props.scaleMode
+const effectiveDataCorrection = computed<EegDataCorrection>(() => {
+  if (props.dataCorrection !== 'calibrated') return props.dataCorrection
   return props.calibrationProfile?.isComplete === true ? 'calibrated' : 'raw'
 })
 
@@ -331,12 +330,7 @@ const radarData = computed(() => {
   let axisMax: number
   let isPercent: boolean
 
-  if (effectiveScaleMode.value === 'normalized') {
-    const norm = normalizeBandDistribution(rawBandValues)
-    displayValues = norm as Record<RadarBandKey, number>
-    axisMax = 100
-    isPercent = true
-  } else if (effectiveScaleMode.value === 'calibrated') {
+  if (effectiveDataCorrection.value === 'calibrated') {
     const calib = calibrateBandValues(
       rawBandValues,
       props.calibrationProfile!.deviceWideMin,

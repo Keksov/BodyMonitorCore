@@ -29,7 +29,7 @@
     "bandWindowRange": "Avg {start} - {end}",
     "bandLatestPoint": "Latest point at {time}",
     "eegWindowLabel": "Averaging window",
-    "eegScaleLabel": "Scale",
+    "eegDataCorrectionLabel": "Data Correction",
     "eegSourceLabel": "Source",
     "eegWindow": {
       "noAveraging": "No averaging",
@@ -39,9 +39,8 @@
       "min1": "1 min",
       "custom": "Custom"
     },
-    "bandScale": {
+    "dataCorrection": {
       "raw": "Raw",
-      "normalized": "Relative",
       "calibrated": "Calibrated"
     },
     "dataSource": {
@@ -54,10 +53,9 @@
       "windowNoAveraging": "the single latest data point before the cursor is used. Reflects an instantaneous value but is more sensitive to noise.",
       "windowPresets": "average of all data points within the respective period before the cursor. A larger window produces a more stable result but reacts more slowly to rapid changes.",
       "windowCustom": "set the window length manually in seconds (minimum 1).",
-      "scaleIntro": "Determines the unit in which band values are displayed on the radar and bar charts.",
-      "scaleRaw": "absolute power values in ThinkGear SDK units. Not comparable across sessions or headsets, but reflects the device's actual measurements.",
-      "scaleNormalized": "each band is recalculated as a percentage of total power across all ThinkGear bands. Allows comparing band balance independently of the absolute signal level. Applies to ThinkGear source only.",
-      "scaleCalibrated": "each band value is shown as 0\u2013100\u00a0% relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms."
+      "correctionIntro": "Determines how band values are corrected before they are displayed on the radar and bar charts.",
+      "correctionRaw": "absolute power values in ThinkGear SDK units. Not comparable across sessions or headsets, but reflects the device's actual measurements.",
+      "correctionCalibrated": "each band value is shown as 0–100 % relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms."
     },
     "badge": {
       "signalGood": "Signal: good",

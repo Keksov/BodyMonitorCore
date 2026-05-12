@@ -25,7 +25,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
 import type { EegCalibrationProfile } from '../stores/device'
-import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
+import type { EegDataCorrection, EegDataSource } from '../stores/preferences'
 import {
   ALGO_BP_KEYS,
   EEG_BAND_KEYS,
@@ -35,7 +35,6 @@ import {
   buildEegBandAveragesSnapshot,
   calibrateBandValues,
   getLatestSeriesValue,
-  normalizeBandDistribution,
 } from '../services/eeg-band-snapshot'
 import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
@@ -44,7 +43,7 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 const props = withDefaults(defineProps<{
   readonly data: LogChartDataSnapshot | null
   readonly windowSec?: number
-  readonly scaleMode?: EegBandScaleMode
+  readonly dataCorrection?: EegDataCorrection
   readonly calibrationProfile?: EegCalibrationProfile | null
   readonly anchorTimestampMs?: number | null
   readonly compact?: boolean
@@ -55,7 +54,7 @@ const props = withDefaults(defineProps<{
   readonly dataSource?: EegDataSource
 }>(), {
   windowSec: 1,
-  scaleMode: 'normalized',
+  dataCorrection: 'raw',
   calibrationProfile: null,
   anchorTimestampMs: null,
   compact: false,
@@ -99,7 +98,7 @@ const BP_BAND_COLORS: Record<AlgoBpKey, string> = {
   bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
 }
 
-const normalizedValueFormatter = new Intl.NumberFormat(undefined, {
+const percentValueFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 })
@@ -109,9 +108,9 @@ const absoluteValueFormatter = new Intl.NumberFormat(undefined, {
   notation: 'compact',
 })
 
-const effectiveScaleMode = computed<EegBandScaleMode>(() => {
-  if (props.scaleMode !== 'calibrated') {
-    return props.scaleMode
+const effectiveDataCorrection = computed<EegDataCorrection>(() => {
+  if (props.dataCorrection !== 'calibrated') {
+    return props.dataCorrection
   }
 
   return props.calibrationProfile?.isComplete === true ? 'calibrated' : 'raw'
@@ -143,11 +142,7 @@ const chartSnapshot = computed(() => {
   const rawBandValues = bandSnapshot.bandValues
   let bandValues = rawBandValues
 
-  if (effectiveScaleMode.value === 'normalized') {
-    bandValues = normalizeBandDistribution(rawBandValues)
-  }
-
-  if (effectiveScaleMode.value === 'calibrated' && props.calibrationProfile?.isComplete === true) {
+  if (effectiveDataCorrection.value === 'calibrated' && props.calibrationProfile?.isComplete === true) {
     bandValues = calibrateBandValues(
       rawBandValues,
       props.calibrationProfile.deviceWideMin,
@@ -257,8 +252,8 @@ function formatBandValue(value: number): string {
     return absoluteValueFormatter.format(value)
   }
 
-  if (effectiveScaleMode.value === 'normalized' || effectiveScaleMode.value === 'calibrated') {
-    return `${normalizedValueFormatter.format(value)}%`
+  if (effectiveDataCorrection.value === 'calibrated') {
+    return `${percentValueFormatter.format(value)}%`
   }
 
   return absoluteValueFormatter.format(value)
@@ -267,7 +262,7 @@ function formatBandValue(value: number): string {
 function buildOption() {
   const snapshot = chartSnapshot.value
   const isAlgoBp = props.dataSource === 'algo-bp'
-  const isPercentScale = !isAlgoBp && (effectiveScaleMode.value === 'normalized' || effectiveScaleMode.value === 'calibrated')
+  const isPercentScale = !isAlgoBp && effectiveDataCorrection.value === 'calibrated'
   const labelFontSize = props.compact ? 10 : 11
   const freqFontSize = props.compact ? 9 : 10
 
@@ -341,7 +336,7 @@ function buildOption() {
         : (isAlgoBp
           ? t('monitoring.axis.eegPower')
           : (isPercentScale
-            ? (effectiveScaleMode.value === 'calibrated' ? t('monitoring.axis.eegCalibrated') : t('monitoring.axis.eegPct'))
+            ? t('monitoring.axis.eegCalibrated')
             : t('monitoring.axis.eegPower'))),
       nameTextStyle: { color: 'rgba(255, 255, 255, 0.7)' },
       splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
@@ -397,9 +392,9 @@ watchEffect(() => {
   chartSnapshot.value
   poorSignalValue.value
   props.compact
-  props.scaleMode
+  props.dataCorrection
   props.dataSource
-  effectiveScaleMode.value
+  effectiveDataCorrection.value
   props.calibrationProfile
   props.showSignalBadge
   props.windowSec

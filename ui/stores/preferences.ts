@@ -2,19 +2,19 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 export type EegDisplayMode = 'radar' | 'bands'
-export type EegBandScaleMode = 'raw' | 'normalized' | 'calibrated'
+export type EegDataCorrection = 'raw' | 'calibrated'
 export type EegDataSource = 'bands' | 'algo-bp'
 
 const EEG_MODE_KEY = 'eegDisplayMode'
 const EEG_BAND_WINDOW_SEC_KEY = 'eegBandWindowSec'
-const EEG_BAND_SCALE_MODE_KEY = 'eegBandScaleMode'
+const EEG_DATA_CORRECTION_KEY = 'eegDataCorrection'
 const EEG_DATA_SOURCE_KEY = 'eegDataSource'
 const EEG_MODE_DEFAULT: EegDisplayMode = 'bands'
 const EEG_BAND_WINDOW_SEC_DEFAULT = 10
-const EEG_BAND_SCALE_MODE_DEFAULT: EegBandScaleMode = 'raw'
+const EEG_DATA_CORRECTION_DEFAULT: EegDataCorrection = 'raw'
 const EEG_DATA_SOURCE_DEFAULT: EegDataSource = 'bands'
 const VALID_EEG_MODES: readonly EegDisplayMode[] = ['bands', 'radar']
-const VALID_EEG_BAND_SCALE_MODES: readonly EegBandScaleMode[] = ['raw', 'normalized', 'calibrated']
+const VALID_EEG_DATA_CORRECTIONS: readonly EegDataCorrection[] = ['raw', 'calibrated']
 const VALID_EEG_DATA_SOURCES: readonly EegDataSource[] = ['bands', 'algo-bp']
 
 function sanitizeEegBandWindowSec(value: unknown): number {
@@ -48,17 +48,17 @@ function readStoredEegBandWindowSec(): number {
   return sanitizeEegBandWindowSec(localStorage.getItem(EEG_BAND_WINDOW_SEC_KEY))
 }
 
-function readStoredEegBandScaleMode(): EegBandScaleMode {
-  const stored = localStorage.getItem(EEG_BAND_SCALE_MODE_KEY)
+function readStoredEegDataCorrection(): EegDataCorrection {
+  const stored = localStorage.getItem(EEG_DATA_CORRECTION_KEY)
   if (stored === 'absolute') {
     return 'raw'
   }
 
-  if (stored !== null && (VALID_EEG_BAND_SCALE_MODES as readonly string[]).includes(stored)) {
-    return stored as EegBandScaleMode
+  if (stored !== null && (VALID_EEG_DATA_CORRECTIONS as readonly string[]).includes(stored)) {
+    return stored as EegDataCorrection
   }
 
-  return EEG_BAND_SCALE_MODE_DEFAULT
+  return EEG_DATA_CORRECTION_DEFAULT
 }
 
 function readStoredEegDataSource(): EegDataSource {
@@ -73,7 +73,7 @@ function readStoredEegDataSource(): EegDataSource {
 export const usePreferencesStore = defineStore('preferences', () => {
   const eegDisplayMode = ref<EegDisplayMode>(readStoredEegMode())
   const eegBandWindowSec = ref<number>(readStoredEegBandWindowSec())
-  const eegBandScaleMode = ref<EegBandScaleMode>(readStoredEegBandScaleMode())
+  const eegDataCorrection = ref<EegDataCorrection>(readStoredEegDataCorrection())
   const eegDataSource = ref<EegDataSource>(readStoredEegDataSource())
 
   watch(eegDisplayMode, (mode) => {
@@ -90,8 +90,8 @@ export const usePreferencesStore = defineStore('preferences', () => {
     localStorage.setItem(EEG_BAND_WINDOW_SEC_KEY, String(normalizedWindowSec))
   }, { immediate: true })
 
-  watch(eegBandScaleMode, (mode) => {
-    localStorage.setItem(EEG_BAND_SCALE_MODE_KEY, mode)
+  watch(eegDataCorrection, (mode) => {
+    localStorage.setItem(EEG_DATA_CORRECTION_KEY, mode)
   })
 
   watch(eegDataSource, (source) => {
@@ -101,7 +101,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
   return {
     eegDisplayMode,
     eegBandWindowSec,
-    eegBandScaleMode,
+    eegDataCorrection,
     eegDataSource,
   }
 })

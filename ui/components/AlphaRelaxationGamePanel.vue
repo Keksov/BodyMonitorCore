@@ -51,6 +51,7 @@
           scale-mode="normalized"
           :force-no-signal="isDeviceOffline"
           :empty-hint-text="chartEmptyHintText"
+          show-signal-badge
           compact
         />
       </div>

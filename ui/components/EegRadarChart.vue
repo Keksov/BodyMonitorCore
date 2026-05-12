@@ -13,32 +13,50 @@ import { use, init, type ECharts } from 'echarts/core'
 import { RadarChart } from 'echarts/charts'
 import { RadarComponent, TooltipComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import type { LogChartDataSnapshot, LogChartSeriesKey } from '@protocol'
+import type { LogChartDataSnapshot } from '@protocol'
+import type { EegBandScaleMode } from '../stores/preferences'
+import type { EegCalibrationProfile } from '../stores/device'
+import {
+  type EegBandKey,
+  buildEegBandAveragesSnapshot,
+  calibrateBandValues,
+  normalizeBandDistribution,
+  getLatestSeriesValue,
+} from '../services/eeg-band-snapshot'
 import { EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
 use([RadarChart, RadarComponent, TooltipComponent, GraphicComponent, CanvasRenderer])
 
-const RADAR_WINDOW_MS = 30_000
-
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   readonly data: LogChartDataSnapshot
   readonly anchorTimestampMs?: number | null
-}>()
+  readonly windowSec?: number
+  readonly scaleMode?: EegBandScaleMode
+  readonly calibrationProfile?: EegCalibrationProfile | null
+}>(), {
+  anchorTimestampMs: null,
+  windowSec: 30,
+  scaleMode: 'normalized',
+  calibrationProfile: null,
+})
 
 const { t } = useI18n()
 const chartRoot = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
-type RadarBandKey = 'delta' | 'theta' | 'alpha1' | 'alpha2' | 'beta1' | 'beta2' | 'gamma1' | 'gamma2'
-const RADAR_BAND_KEYS: readonly RadarBandKey[] = ['delta', 'theta', 'alpha1', 'alpha2', 'beta1', 'beta2', 'gamma1', 'gamma2']
-const RADAR_DISPLAY_KEYS: readonly RadarBandKey[] = ['delta', 'gamma2', 'gamma1', 'beta2', 'beta1', 'alpha2', 'alpha1', 'theta']
+type RadarBandKey = EegBandKey
+const RADAR_DISPLAY_KEYS: readonly RadarBandKey[] = ['gamma2', 'gamma1', 'beta2', 'beta1', 'delta', 'theta', 'alpha1', 'alpha2']
 
 const RADAR_OUTLINE_COLOR = 'rgba(255, 255, 255, 0.92)'
-const RADAR_OUTLINE_FILL = 'rgba(255, 255, 255, 0.04)'
+const RADAR_OUTLINE_FILL = 'transparent'
+const RADAR_START_ANGLE_DEG = 67.5
 const RADAR_RADIUS_FACTOR = 0.37
+const RADAR_SPLIT_COUNT = 5
+const RADAR_BACKGROUND_CENTER_ALPHA = 0.085
+const RADAR_BACKGROUND_EDGE_ALPHA = 0.028
 const RADAR_BAND_FILL_OPACITY = 0.2
-const RADAR_SPOKE_OPACITY = 0.72
+const RADAR_CENTER_HIGHLIGHT_OPACITY = 0.18
 const BAND_FREQ_LABELS: Record<RadarBandKey, string> = {
   delta: '0.5–4 Hz',
   theta: '4–8 Hz',
@@ -50,26 +68,7 @@ const BAND_FREQ_LABELS: Record<RadarBandKey, string> = {
   gamma2: '40–100 Hz',
 }
 
-function getSeriesPoints(key: LogChartSeriesKey): readonly [number, number][] {
-  const s = props.data.series.find((item) => item.key === key)
-  return (s?.points ?? []) as readonly [number, number][]
-}
-
-function sumPairPoints(keyA: LogChartSeriesKey, keyB: LogChartSeriesKey): readonly [number, number][] {
-  const a = getSeriesPoints(keyA)
-  const b = getSeriesPoints(keyB)
-  if (a.length === 0) return b
-  if (b.length === 0) return a
-  const mapB = new Map(b.map((p) => [p[0], p[1]]))
-  return a.map((p) => [p[0], p[1] + (mapB.get(p[0]) ?? 0)] as [number, number])
-}
-
-function avgLastWindow(points: readonly [number, number][], maxTs: number): number {
-  const windowStart = maxTs - RADAR_WINDOW_MS
-  const windowPoints = points.filter((p) => p[0] >= windowStart)
-  if (windowPoints.length === 0) return 0
-  return windowPoints.reduce((sum, p) => sum + p[1], 0) / windowPoints.length
-}
+const rawValueFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, notation: 'compact' })
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = hex.replace('#', '')
@@ -84,20 +83,49 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function buildRadarSpokeGraphics() {
+function toSignalQualityPercent(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null
+  }
+
+  const clampedValue = Math.max(0, Math.min(200, value))
+  return Math.round((1 - (clampedValue / 200)) * 100)
+}
+
+function formatSignalBadgeText(label: string, value: number): string {
+  const qualityPercent = toSignalQualityPercent(value)
+  if (qualityPercent === null) {
+    return label
+  }
+
+  return `${label} ${qualityPercent}%`
+}
+
+function getRadarGeometry() {
   const width = chartRoot.value?.clientWidth ?? 0
   const height = chartRoot.value?.clientHeight ?? 0
   if (width <= 0 || height <= 0) {
+    return null
+  }
+
+  return {
+    centerX: width * 0.5,
+    centerY: height * 0.5,
+    radius: Math.min(width, height) * RADAR_RADIUS_FACTOR,
+    angleStepDeg: 360 / RADAR_DISPLAY_KEYS.length,
+  }
+}
+
+function buildRadarSpokeGraphics() {
+  const geometry = getRadarGeometry()
+  if (geometry === null) {
     return []
   }
 
-  const centerX = width * 0.5
-  const centerY = height * 0.5
-  const radius = Math.min(width, height) * RADAR_RADIUS_FACTOR
-  const angleStepDeg = 360 / RADAR_DISPLAY_KEYS.length
+  const { centerX, centerY, radius, angleStepDeg } = geometry
 
   return RADAR_DISPLAY_KEYS.map((bandKey, index) => {
-    const angleDeg = 90 - index * angleStepDeg
+    const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
     const angleRad = (angleDeg * Math.PI) / 180
 
     return {
@@ -110,7 +138,7 @@ function buildRadarSpokeGraphics() {
         y2: centerY - radius * Math.sin(angleRad),
       },
       style: {
-        stroke: hexToRgba(EEG_BAND_COLORS[bandKey], RADAR_SPOKE_OPACITY),
+        stroke: EEG_BAND_COLORS[bandKey],
         lineWidth: 1.5,
       },
       silent: true,
@@ -119,50 +147,180 @@ function buildRadarSpokeGraphics() {
   })
 }
 
-const radarData = computed(() => {
-  const maxTs = props.anchorTimestampMs ?? props.data.maxTimestampMs
-  if (maxTs === null) return null
-
-  const bandPoints: Record<RadarBandKey, readonly [number, number][]> = {
-    delta: getSeriesPoints('delta'),
-    theta: getSeriesPoints('theta'),
-    alpha1: getSeriesPoints('alpha1'),
-    alpha2: getSeriesPoints('alpha2'),
-    beta1: getSeriesPoints('beta1'),
-    beta2: getSeriesPoints('beta2'),
-    gamma1: getSeriesPoints('gamma1'),
-    gamma2: getSeriesPoints('gamma2'),
+function buildRadarBackgroundGraphics() {
+  const geometry = getRadarGeometry()
+  if (geometry === null) {
+    return []
   }
 
-  const bandAvgs = Object.fromEntries(
-    RADAR_BAND_KEYS.map((key) => [key, avgLastWindow(bandPoints[key], maxTs)])
-  ) as Record<RadarBandKey, number>
+  const { centerX, centerY, radius, angleStepDeg } = geometry
+  const points = RADAR_DISPLAY_KEYS.map((_, index) => {
+    const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
+    const angleRad = (angleDeg * Math.PI) / 180
 
-  const totalBand = Object.values(bandAvgs).reduce((s, v) => s + v, 0)
-  const bandPcts = totalBand > 0
-    ? Object.fromEntries(RADAR_BAND_KEYS.map((key) => [key, (bandAvgs[key] / totalBand) * 100])) as Record<RadarBandKey, number>
-    : Object.fromEntries(RADAR_BAND_KEYS.map((key) => [key, 0])) as Record<RadarBandKey, number>
+    return [
+      centerX + radius * Math.cos(angleRad),
+      centerY - radius * Math.sin(angleRad),
+    ]
+  })
 
-  return {
-    bandPcts,
+  return [{
+    type: 'polygon',
+    id: 'radar-background',
+    shape: {
+      points,
+    },
+    style: {
+      fill: {
+        type: 'radial',
+        x: centerX,
+        y: centerY,
+        r: radius,
+        colorStops: [
+          { offset: 0, color: `rgba(255,255,255,${RADAR_BACKGROUND_CENTER_ALPHA})` },
+          { offset: 0.55, color: 'rgba(255,255,255,0.055)' },
+          { offset: 1, color: `rgba(255,255,255,${RADAR_BACKGROUND_EDGE_ALPHA})` },
+        ],
+        global: true,
+      },
+    },
+    silent: true,
+    z: 0,
+  }]
+}
+
+function buildRadarSectorGraphics(values: readonly number[], axisMax: number) {
+  const geometry = getRadarGeometry()
+  if (geometry === null || axisMax <= 0) {
+    return []
   }
+
+  const { centerX, centerY, radius, angleStepDeg } = geometry
+
+  return RADAR_DISPLAY_KEYS.flatMap((bandKey, index) => {
+    const nextIndex = (index + 1) % RADAR_DISPLAY_KEYS.length
+    const nextBandKey = RADAR_DISPLAY_KEYS[nextIndex]
+    const valueRatio = Math.max(0, Math.min(1, values[index] / axisMax))
+    const nextValueRatio = Math.max(0, Math.min(1, values[nextIndex] / axisMax))
+    const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
+    const nextAngleDeg = RADAR_START_ANGLE_DEG + nextIndex * angleStepDeg
+    const angleRad = (angleDeg * Math.PI) / 180
+    const nextAngleRad = (nextAngleDeg * Math.PI) / 180
+
+    const pointX = centerX + radius * valueRatio * Math.cos(angleRad)
+    const pointY = centerY - radius * valueRatio * Math.sin(angleRad)
+    const nextPointX = centerX + radius * nextValueRatio * Math.cos(nextAngleRad)
+    const nextPointY = centerY - radius * nextValueRatio * Math.sin(nextAngleRad)
+    const sectorPoints = [
+      [centerX, centerY],
+      [pointX, pointY],
+      [nextPointX, nextPointY],
+    ] as const
+    const sectorRadius = Math.max(1, radius * Math.max(valueRatio, nextValueRatio))
+
+    return [
+      {
+        type: 'polygon',
+        id: `radar-sector-${bandKey}`,
+        shape: {
+          points: sectorPoints,
+        },
+        style: {
+          fill: {
+            type: 'linear',
+            x: pointX,
+            y: pointY,
+            x2: nextPointX,
+            y2: nextPointY,
+            colorStops: [
+              { offset: 0, color: hexToRgba(EEG_BAND_COLORS[bandKey], RADAR_BAND_FILL_OPACITY) },
+              { offset: 1, color: hexToRgba(EEG_BAND_COLORS[nextBandKey], RADAR_BAND_FILL_OPACITY) },
+            ],
+            global: true,
+          },
+        },
+        silent: true,
+        z: 6,
+      },
+      {
+        type: 'polygon',
+        id: `radar-sector-highlight-${bandKey}`,
+        shape: {
+          points: sectorPoints,
+        },
+        style: {
+          fill: {
+            type: 'radial',
+            x: centerX,
+            y: centerY,
+            r: sectorRadius,
+            colorStops: [
+              { offset: 0, color: `rgba(255,255,255,${RADAR_CENTER_HIGHLIGHT_OPACITY})` },
+              { offset: 0.6, color: 'rgba(255,255,255,0.05)' },
+              { offset: 1, color: 'rgba(255,255,255,0)' },
+            ],
+            global: true,
+          },
+        },
+        silent: true,
+        z: 7,
+      },
+    ]
+  })
+}
+
+const effectiveScaleMode = computed<EegBandScaleMode>(() => {
+  if (props.scaleMode !== 'calibrated') return props.scaleMode
+  return props.calibrationProfile?.isComplete === true ? 'calibrated' : 'raw'
 })
 
-// PoorSignal badge
+const radarData = computed(() => {
+  const bandSnapshot = buildEegBandAveragesSnapshot(props.data, props.windowSec, props.anchorTimestampMs)
+  if (bandSnapshot === null) return null
+
+  const rawBandValues = bandSnapshot.bandValues
+  let displayValues: Record<RadarBandKey, number>
+  let axisMax: number
+  let isPercent: boolean
+
+  if (effectiveScaleMode.value === 'normalized') {
+    const norm = normalizeBandDistribution(rawBandValues)
+    displayValues = norm as Record<RadarBandKey, number>
+    axisMax = 100
+    isPercent = true
+  } else if (effectiveScaleMode.value === 'calibrated') {
+    const calib = calibrateBandValues(
+      rawBandValues,
+      props.calibrationProfile!.deviceWideMin,
+      props.calibrationProfile!.deviceWideMax,
+    )
+    displayValues = calib as Record<RadarBandKey, number>
+    axisMax = 100
+    isPercent = true
+  } else {
+    displayValues = rawBandValues as Record<RadarBandKey, number>
+    axisMax = Math.max(1, ...Object.values(rawBandValues))
+    isPercent = false
+  }
+
+  return { displayValues, axisMax, isPercent }
+})
+
+// PoorSignal badge — resolved at anchorTimestampMs, not the last session point
 const signalBadgeText = computed(() => {
-  const s = props.data.series.find((item) => item.key === 'poorSignal')
-  if (!s || s.points.length === 0) return null
-  const value = s.points.at(-1)?.[1] ?? null
+  const series = props.data.series.find((item) => item.key === 'poorSignal')
+  if (!series || series.points.length === 0) return null
+  const value = getLatestSeriesValue(props.data, 'poorSignal', props.anchorTimestampMs)
   if (value === null) return t('monitoring.badge.signalNone')
-  if (value === 0) return t('monitoring.badge.signalGood')
-  if (value <= 25) return t('monitoring.badge.signalFair')
-  return t('monitoring.badge.signalPoor')
+  if (value === 0) return formatSignalBadgeText(t('monitoring.badge.signalGood'), value)
+  if (value <= 25) return formatSignalBadgeText(t('monitoring.badge.signalFair'), value)
+  return formatSignalBadgeText(t('monitoring.badge.signalPoor'), value)
 })
 
 const signalBadgeColor = computed(() => {
-  const s = props.data.series.find((item) => item.key === 'poorSignal')
-  if (!s || s.points.length === 0) return '#9aa5b1'
-  const value = s.points.at(-1)?.[1] ?? null
+  const series = props.data.series.find((item) => item.key === 'poorSignal')
+  if (!series || series.points.length === 0) return '#9aa5b1'
+  const value = getLatestSeriesValue(props.data, 'poorSignal', props.anchorTimestampMs)
   if (value === null) return '#9aa5b1'
   if (value === 0) return '#43aa8b'
   if (value <= 25) return '#f9c74f'
@@ -171,6 +329,8 @@ const signalBadgeColor = computed(() => {
 
 function buildRadarOption() {
   const d = radarData.value
+  const axisMax = d?.axisMax ?? 100
+  const isPercent = d?.isPercent ?? true
   const labelRich = Object.fromEntries(
     RADAR_DISPLAY_KEYS.map((key) => [key, {
       color: EEG_BAND_COLORS[key],
@@ -182,26 +342,30 @@ function buildRadarOption() {
 
   const indicator = RADAR_DISPLAY_KEYS.map((key) => ({
     name: `{${key}|${t(`monitoring.series.${key}`)}}\n{${key}|${BAND_FREQ_LABELS[key]}}`,
-    max: 100,
+    max: axisMax,
   }))
 
   const values = d !== null
-    ? RADAR_DISPLAY_KEYS.map((key) => d.bandPcts[key])
+    ? RADAR_DISPLAY_KEYS.map((key) => d.displayValues[key])
     : RADAR_DISPLAY_KEYS.map(() => 0)
 
-  const bandSeries = RADAR_DISPLAY_KEYS.map((bandKey, bandIndex) => ({
-    type: 'radar' as const,
-    name: bandKey,
-    data: [{
-      value: values.map((value, valueIndex) => (valueIndex === bandIndex ? value : 0)),
-    }],
-    lineStyle: { color: EEG_BAND_COLORS[bandKey], width: 2 },
-    areaStyle: { color: hexToRgba(EEG_BAND_COLORS[bandKey], RADAR_BAND_FILL_OPACITY) },
-    itemStyle: { color: EEG_BAND_COLORS[bandKey] },
-    symbol: 'none',
-    emphasis: { focus: 'series' as const },
-    z: 10 + bandIndex,
-  }))
+  const bandSeries = RADAR_DISPLAY_KEYS.map((bandKey, bandIndex) => {
+    const nextBandIndex = (bandIndex + 1) % RADAR_DISPLAY_KEYS.length
+
+    return {
+      type: 'radar' as const,
+      name: bandKey,
+      data: [{
+        value: values.map((value, valueIndex) => (valueIndex === bandIndex || valueIndex === nextBandIndex ? value : 0)),
+      }],
+      lineStyle: { color: 'transparent', width: 0, opacity: 0 },
+      areaStyle: { color: 'transparent', opacity: 0 },
+      itemStyle: { color: 'transparent', opacity: 0 },
+      symbol: 'none',
+      emphasis: { focus: 'series' as const },
+      z: 10 + bandIndex,
+    }
+  })
 
   return {
     animation: false,
@@ -215,25 +379,25 @@ function buildRadarOption() {
         }
 
         const bandIndex = RADAR_DISPLAY_KEYS.indexOf(bandKey)
-        const values = Array.isArray(params.value) ? params.value : []
-        const bandValue = bandIndex >= 0 ? values[bandIndex] ?? 0 : 0
+        const vals = Array.isArray(params.value) ? params.value : []
+        const bandValue = bandIndex >= 0 ? vals[bandIndex] ?? 0 : 0
+        const formatted = isPercent
+          ? `${bandValue.toFixed(1)}%`
+          : rawValueFormatter.format(bandValue)
 
-        return `${t(`monitoring.series.${bandKey}`)}<br/>${BAND_FREQ_LABELS[bandKey]}: ${bandValue.toFixed(1)}%`
+        return `${t(`monitoring.series.${bandKey}`)}<br/>${BAND_FREQ_LABELS[bandKey]}: ${formatted}`
       },
     },
-    graphic: buildRadarSpokeGraphics(),
+    graphic: [...buildRadarBackgroundGraphics(), ...buildRadarSectorGraphics(values, axisMax), ...buildRadarSpokeGraphics()],
     radar: {
       shape: 'polygon',
       center: ['50%', '50%'],
       radius: '74%',
-      startAngle: 90,
+      startAngle: RADAR_START_ANGLE_DEG,
+      splitNumber: RADAR_SPLIT_COUNT,
       indicator,
-      splitArea: {
-        areaStyle: {
-          color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)'],
-        },
-      },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.15)' } },
+      splitArea: { show: false },
+      axisLine: { show: false },
       splitLine: { lineStyle: { color: 'rgba(255,255,255,0.12)' } },
       axisName: {
         fontSize: 11,

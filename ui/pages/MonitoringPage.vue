@@ -76,49 +76,15 @@
               </q-btn-group>
             </div>
 
-            <div v-if="hasEegData && preferences.eegDisplayMode === 'bands'" class="col-auto row items-center q-gutter-sm">
-              <q-input
-                dense
-                outlined
-                hide-bottom-space
-                type="number"
-                min="1"
-                input-class="text-right"
-                class="monitoring-page__band-window"
-                :model-value="preferences.eegBandWindowSec"
-                :label="$t('monitoring.bandWindowSec')"
-                @update:model-value="updateBandWindowSec"
+            <div v-if="hasEegData" class="col-auto row items-center q-gutter-sm">
+              <eeg-chart-settings-bar
+                :window-sec="preferences.eegBandWindowSec"
+                :scale-mode="preferences.eegBandScaleMode"
+                :can-use-calibrated="canUseCalibratedScale"
+                :calibrated-tooltip="calibratedUnavailableMessage"
+                @update:window-sec="updateBandWindowSec"
+                @update:scale-mode="preferences.eegBandScaleMode = $event"
               />
-
-              <q-btn-group flat>
-                <q-btn
-                  dense
-                  flat
-                  no-caps
-                  :color="preferences.eegBandScaleMode === 'raw' ? 'secondary' : undefined"
-                  :label="$t('monitoring.bandScale.raw')"
-                  @click="preferences.eegBandScaleMode = 'raw'"
-                />
-                <q-btn
-                  dense
-                  flat
-                  no-caps
-                  :color="preferences.eegBandScaleMode === 'normalized' ? 'secondary' : undefined"
-                  :label="$t('monitoring.bandScale.normalized')"
-                  @click="preferences.eegBandScaleMode = 'normalized'"
-                />
-                <q-btn
-                  dense
-                  flat
-                  no-caps
-                  :disable="!canUseCalibratedScale"
-                  :color="preferences.eegBandScaleMode === 'calibrated' ? 'secondary' : undefined"
-                  :label="$t('monitoring.bandScale.calibrated')"
-                  @click="preferences.eegBandScaleMode = 'calibrated'"
-                >
-                  <q-tooltip v-if="!canUseCalibratedScale">{{ calibratedUnavailableMessage }}</q-tooltip>
-                </q-btn>
-              </q-btn-group>
 
               <q-chip v-if="bandWindowRangeLabel !== null" dense color="grey-9" text-color="grey-3">
                 {{ bandWindowRangeLabel }}
@@ -174,6 +140,9 @@
                       class="monitoring-page__chart"
                       :data="activeChartData"
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
+                      :window-sec="preferences.eegBandWindowSec"
+                      :scale-mode="preferences.eegBandScaleMode"
+                      :calibration-profile="activeEegCalibrationProfile"
                     />
                   </div>
                 </template>
@@ -229,6 +198,9 @@
                 class="monitoring-page__chart"
                 :data="activeChartData"
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
+                :window-sec="preferences.eegBandWindowSec"
+                :scale-mode="preferences.eegBandScaleMode"
+                :calibration-profile="activeEegCalibrationProfile"
               />
             </template>
           </template>
@@ -280,6 +252,7 @@ type ChartViewportPreset = 'fit' | 'recent'
 const DeviceDataChart = defineAsyncComponent(() => import('../components/DeviceDataChart.vue'))
 const EegRadarChart = defineAsyncComponent(() => import('../components/EegRadarChart.vue'))
 const EegCurrentReadingsChart = defineAsyncComponent(() => import('../components/EegCurrentReadingsChart.vue'))
+const EegChartSettingsBar = defineAsyncComponent(() => import('../components/EegChartSettingsBar.vue'))
 const GnauralScheduleView = defineAsyncComponent(() => import('../../../GnauralCore/ui/components/GnauralScheduleView.vue'))
 const GnauralTransportControls = defineAsyncComponent(() => import('../../../GnauralCore/ui/components/GnauralTransportControls.vue'))
 
@@ -469,13 +442,17 @@ const bandWindowRangeLabel = computed(() => {
     return null
   }
 
-  const windowStartTimestampMs = anchorTimestampMs - preferences.eegBandWindowSec * 1000
   const formatter = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   })
 
+  if (preferences.eegBandWindowSec === 0) {
+    return t('monitoring.bandLatestPoint', { time: formatter.format(new Date(anchorTimestampMs)) })
+  }
+
+  const windowStartTimestampMs = anchorTimestampMs - preferences.eegBandWindowSec * 1000
   return t('monitoring.bandWindowRange', {
     start: formatter.format(new Date(windowStartTimestampMs)),
     end: formatter.format(new Date(anchorTimestampMs)),
@@ -533,11 +510,11 @@ function updateBandWindowSec(value: string | number | null) {
       ? Number(value)
       : Number.NaN
 
-  if (!Number.isFinite(parsed) || parsed < 1) {
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return
   }
 
-  preferences.eegBandWindowSec = Math.max(1, Math.trunc(parsed))
+  preferences.eegBandWindowSec = parsed === 0 ? 0 : Math.max(1, Math.trunc(parsed))
 }
 
 function handleMonitoringStartStop() {

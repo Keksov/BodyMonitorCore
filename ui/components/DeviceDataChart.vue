@@ -286,11 +286,24 @@ function getLatestPoorSignal(snapshot: LogChartDataSnapshot): number | null {
   return last !== undefined ? last[1] : null
 }
 
+function toSignalQualityPercent(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null
+  }
+
+  const clampedValue = Math.max(0, Math.min(200, value))
+  return Math.round((1 - (clampedValue / 200)) * 100)
+}
+
 function poorSignalBadgeText(value: number | null): string {
   if (value === null) return t('monitoring.badge.signalNone')
-  if (value === 0) return t('monitoring.badge.signalGood')
-  if (value <= 25) return t('monitoring.badge.signalFair')
-  return t('monitoring.badge.signalPoor')
+
+  const qualityPercent = toSignalQualityPercent(value)
+  const suffix = qualityPercent === null ? '' : ` ${qualityPercent}%`
+
+  if (value === 0) return `${t('monitoring.badge.signalGood')}${suffix}`
+  if (value <= 25) return `${t('monitoring.badge.signalFair')}${suffix}`
+  return `${t('monitoring.badge.signalPoor')}${suffix}`
 }
 
 function poorSignalBadgeColor(value: number | null): string {

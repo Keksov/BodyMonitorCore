@@ -147,6 +147,7 @@
             :force-no-signal="isDeviceOffline"
             :empty-hint-text="chartEmptyHintText"
             compact
+            show-signal-badge
           />
         </div>
 

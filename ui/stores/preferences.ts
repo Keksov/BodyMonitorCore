@@ -20,8 +20,12 @@ function sanitizeEegBandWindowSec(value: unknown): number {
       ? Number(value)
       : Number.NaN
 
-  if (!Number.isFinite(parsed) || parsed < 1) {
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return EEG_BAND_WINDOW_SEC_DEFAULT
+  }
+
+  if (parsed === 0) {
+    return 0
   }
 
   return Math.max(1, Math.trunc(parsed))

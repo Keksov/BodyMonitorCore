@@ -100,16 +100,29 @@ export function buildEegBandAveragesSnapshot(
     return null
   }
 
-  const normalizedWindowSec = Math.max(1, Math.trunc(windowSec))
-  const startTimestampMs = anchorMs - normalizedWindowSec * 1000
-
   const bandValues = {} as EegBandValues
   const sampleCounts = {} as Record<EegBandKey, number>
 
-  for (const bandKey of EEG_BAND_KEYS) {
-    const average = getWindowAverage(getSeriesPoints(snapshot, bandKey), startTimestampMs, anchorMs)
-    bandValues[bandKey] = average.value
-    sampleCounts[bandKey] = average.count
+  if (windowSec === 0) {
+    for (const bandKey of EEG_BAND_KEYS) {
+      const latest = getLatestSeriesValue(snapshot, bandKey, anchorMs)
+      if (latest !== null) {
+        bandValues[bandKey] = latest
+        sampleCounts[bandKey] = 1
+      } else {
+        bandValues[bandKey] = 0
+        sampleCounts[bandKey] = 0
+      }
+    }
+  } else {
+    const normalizedWindowSec = Math.max(1, Math.trunc(windowSec))
+    const startTimestampMs = anchorMs - normalizedWindowSec * 1000
+
+    for (const bandKey of EEG_BAND_KEYS) {
+      const average = getWindowAverage(getSeriesPoints(snapshot, bandKey), startTimestampMs, anchorMs)
+      bandValues[bandKey] = average.value
+      sampleCounts[bandKey] = average.count
+    }
   }
 
   return {

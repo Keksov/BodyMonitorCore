@@ -27,10 +27,32 @@
     },
     "bandWindowSec": "EEG window (sec)",
     "bandWindowRange": "Avg {start} - {end}",
+    "bandLatestPoint": "Latest point at {time}",
+    "eegWindowLabel": "Averaging window",
+    "eegScaleLabel": "Scale",
+    "eegWindow": {
+      "noAveraging": "No averaging",
+      "sec5": "5 sec",
+      "sec10": "10 sec",
+      "sec30": "30 sec",
+      "min1": "1 min",
+      "custom": "Custom"
+    },
     "bandScale": {
       "raw": "Raw",
-      "normalized": "Normalized %",
+      "normalized": "Normalized",
       "calibrated": "Calibrated"
+    },
+    "eegSettingsHelp": {
+      "title": "Help: EEG chart settings",
+      "windowIntro": "Determines the time range used to calculate each EEG band value at the current cursor position.",
+      "windowNoAveraging": "the single latest data point before the cursor is used. Reflects an instantaneous value but is more sensitive to noise.",
+      "windowPresets": "average of all data points within the respective period before the cursor. A larger window produces a more stable result but reacts more slowly to rapid changes.",
+      "windowCustom": "set the window length manually in seconds (minimum 1).",
+      "scaleIntro": "Determines the unit in which band values are displayed on the radar and bar charts.",
+      "scaleRaw": "absolute power values in ThinkGear SDK units. Not comparable across sessions or headsets, but reflects the device's actual measurements.",
+      "scaleNormalized": "each band is recalculated as a percentage of total power across all bands. Allows comparing band balance independently of the absolute signal level.",
+      "scaleCalibrated": "each band value is shown as 0\u2013100\u00a0% relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms."
     },
     "badge": {
       "signalGood": "Signal: good",

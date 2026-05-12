@@ -139,6 +139,24 @@ const poorSignalValue = computed(() => {
   return getLatestSeriesValue(props.data, 'poorSignal', props.anchorTimestampMs)
 })
 
+function toSignalQualityPercent(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null
+  }
+
+  const clampedValue = Math.max(0, Math.min(200, value))
+  return Math.round((1 - (clampedValue / 200)) * 100)
+}
+
+function formatSignalBadgeText(label: string, value: number): string {
+  const qualityPercent = toSignalQualityPercent(value)
+  if (qualityPercent === null) {
+    return label
+  }
+
+  return `${label} ${qualityPercent}%`
+}
+
 const hasAnySamples = computed(() => {
   const snapshot = chartSnapshot.value
   if (snapshot === null) {
@@ -156,9 +174,9 @@ const signalBadgeText = computed(() => {
   const value = poorSignalValue.value
 
   if (value === null) return t('monitoring.badge.signalNone')
-  if (value === 0) return t('monitoring.badge.signalGood')
-  if (value <= 25) return t('monitoring.badge.signalFair')
-  return t('monitoring.badge.signalPoor')
+  if (value === 0) return formatSignalBadgeText(t('monitoring.badge.signalGood'), value)
+  if (value <= 25) return formatSignalBadgeText(t('monitoring.badge.signalFair'), value)
+  return formatSignalBadgeText(t('monitoring.badge.signalPoor'), value)
 })
 
 const signalBadgeColor = computed(() => {

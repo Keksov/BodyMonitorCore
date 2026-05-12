@@ -30,6 +30,7 @@
     "bandLatestPoint": "Latest point at {time}",
     "eegWindowLabel": "Averaging window",
     "eegScaleLabel": "Scale",
+    "eegSourceLabel": "Source",
     "eegWindow": {
       "noAveraging": "No averaging",
       "sec5": "5 sec",
@@ -40,8 +41,12 @@
     },
     "bandScale": {
       "raw": "Raw",
-      "normalized": "Normalized",
+      "normalized": "Relative",
       "calibrated": "Calibrated"
+    },
+    "dataSource": {
+      "bands": "ThinkGear",
+      "algoBp": "Algo BP"
     },
     "eegSettingsHelp": {
       "title": "Help: EEG chart settings",
@@ -51,7 +56,7 @@
       "windowCustom": "set the window length manually in seconds (minimum 1).",
       "scaleIntro": "Determines the unit in which band values are displayed on the radar and bar charts.",
       "scaleRaw": "absolute power values in ThinkGear SDK units. Not comparable across sessions or headsets, but reflects the device's actual measurements.",
-      "scaleNormalized": "each band is recalculated as a percentage of total power across all bands. Allows comparing band balance independently of the absolute signal level.",
+      "scaleNormalized": "each band is recalculated as a percentage of total power across all ThinkGear bands. Allows comparing band balance independently of the absolute signal level. Applies to ThinkGear source only.",
       "scaleCalibrated": "each band value is shown as 0\u2013100\u00a0% relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms."
     },
     "badge": {
@@ -102,7 +107,12 @@
       "gamma2": "Gamma 2",
       "alpha": "Alpha",
       "beta": "Beta",
-      "gamma": "Gamma"
+      "gamma": "Gamma",
+      "bpDelta": "BP Delta",
+      "bpTheta": "BP Theta",
+      "bpAlpha": "BP Alpha",
+      "bpBeta": "BP Beta",
+      "bpGamma": "BP Gamma"
     }
   },
   "settings": {

@@ -82,8 +82,10 @@
                 :scale-mode="preferences.eegBandScaleMode"
                 :can-use-calibrated="canUseCalibratedScale"
                 :calibrated-tooltip="calibratedUnavailableMessage"
+                :data-source="preferences.eegDataSource"
                 @update:window-sec="updateBandWindowSec"
                 @update:scale-mode="preferences.eegBandScaleMode = $event"
+                @update:data-source="preferences.eegDataSource = $event"
               />
 
               <q-chip v-if="bandWindowRangeLabel !== null" dense color="grey-9" text-color="grey-3">
@@ -132,6 +134,7 @@
                       :calibration-profile="activeEegCalibrationProfile"
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                       :force-no-signal="isSelectedEegOffline"
+                      :data-source="preferences.eegDataSource"
                       show-signal-badge
                     />
 
@@ -143,6 +146,7 @@
                       :window-sec="preferences.eegBandWindowSec"
                       :scale-mode="preferences.eegBandScaleMode"
                       :calibration-profile="activeEegCalibrationProfile"
+                      :data-source="preferences.eegDataSource"
                     />
                   </div>
                 </template>
@@ -190,6 +194,7 @@
                 :calibration-profile="activeEegCalibrationProfile"
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                 :force-no-signal="isSelectedEegOffline"
+                :data-source="preferences.eegDataSource"
                 show-signal-badge
               />
 
@@ -201,6 +206,7 @@
                 :window-sec="preferences.eegBandWindowSec"
                 :scale-mode="preferences.eegBandScaleMode"
                 :calibration-profile="activeEegCalibrationProfile"
+                :data-source="preferences.eegDataSource"
               />
             </template>
           </template>

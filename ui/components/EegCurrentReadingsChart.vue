@@ -25,16 +25,19 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
 import type { EegCalibrationProfile } from '../stores/device'
-import type { EegBandScaleMode } from '../stores/preferences'
+import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
 import {
+  ALGO_BP_KEYS,
   EEG_BAND_KEYS,
+  type AlgoBpKey,
   type EegBandKey,
+  buildAlgoBpSnapshot,
   buildEegBandAveragesSnapshot,
   calibrateBandValues,
   getLatestSeriesValue,
   normalizeBandDistribution,
 } from '../services/eeg-band-snapshot'
-import { EEG_BAND_COLORS } from '../services/eeg-band-colors'
+import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -49,6 +52,7 @@ const props = withDefaults(defineProps<{
   readonly showStateHint?: boolean
   readonly forceNoSignal?: boolean
   readonly emptyHintText?: string | null
+  readonly dataSource?: EegDataSource
 }>(), {
   windowSec: 1,
   scaleMode: 'normalized',
@@ -59,6 +63,7 @@ const props = withDefaults(defineProps<{
   showStateHint: true,
   forceNoSignal: false,
   emptyHintText: null,
+  dataSource: 'bands',
 })
 
 const { t } = useI18n()
@@ -76,6 +81,22 @@ const BAND_FREQ: Record<EegBandKey, string> = {
   beta2: '17–30 Hz',
   gamma1: '30–40 Hz',
   gamma2: '40–100 Hz',
+}
+
+const BP_BAND_FREQ: Record<AlgoBpKey, string> = {
+  bpDelta: '<4 Hz',
+  bpTheta: '4–8 Hz',
+  bpAlpha: '8–13 Hz',
+  bpBeta: '13–30 Hz',
+  bpGamma: '>30 Hz',
+}
+
+const BP_BAND_COLORS: Record<AlgoBpKey, string> = {
+  bpDelta: COMBINED_EEG_BAND_COLORS.delta,
+  bpTheta: COMBINED_EEG_BAND_COLORS.theta,
+  bpAlpha: COMBINED_EEG_BAND_COLORS.alpha,
+  bpBeta: COMBINED_EEG_BAND_COLORS.beta,
+  bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
 }
 
 const normalizedValueFormatter = new Intl.NumberFormat(undefined, {
@@ -99,6 +120,15 @@ const effectiveScaleMode = computed<EegBandScaleMode>(() => {
 const chartSnapshot = computed(() => {
   if (props.data === null) {
     return null
+  }
+
+  if (props.dataSource === 'algo-bp') {
+    const bpSnapshot = buildAlgoBpSnapshot(
+      props.data,
+      props.windowSec,
+      props.anchorTimestampMs,
+    )
+    return bpSnapshot
   }
 
   const bandSnapshot = buildEegBandAveragesSnapshot(
@@ -163,7 +193,12 @@ const hasAnySamples = computed(() => {
     return false
   }
 
-  return EEG_BAND_KEYS.some((bandKey) => snapshot.sampleCounts[bandKey] > 0)
+  const counts = snapshot.sampleCounts as Record<string, number>
+  if (props.dataSource === 'algo-bp') {
+    return ALGO_BP_KEYS.some((key) => (counts[key] ?? 0) > 0)
+  }
+
+  return EEG_BAND_KEYS.some((bandKey) => (counts[bandKey] ?? 0) > 0)
 })
 
 const signalBadgeText = computed(() => {
@@ -218,6 +253,10 @@ const stateHintText = computed(() => {
 })
 
 function formatBandValue(value: number): string {
+  if (props.dataSource === 'algo-bp') {
+    return absoluteValueFormatter.format(value)
+  }
+
   if (effectiveScaleMode.value === 'normalized' || effectiveScaleMode.value === 'calibrated') {
     return `${normalizedValueFormatter.format(value)}%`
   }
@@ -227,13 +266,27 @@ function formatBandValue(value: number): string {
 
 function buildOption() {
   const snapshot = chartSnapshot.value
-  const isPercentScale = effectiveScaleMode.value === 'normalized' || effectiveScaleMode.value === 'calibrated'
+  const isAlgoBp = props.dataSource === 'algo-bp'
+  const isPercentScale = !isAlgoBp && (effectiveScaleMode.value === 'normalized' || effectiveScaleMode.value === 'calibrated')
   const labelFontSize = props.compact ? 10 : 11
   const freqFontSize = props.compact ? 9 : 10
-  const categories = EEG_BAND_KEYS.map((key) => ({
+
+  const activeKeys: readonly string[] = isAlgoBp ? ALGO_BP_KEYS : EEG_BAND_KEYS
+  const categories = activeKeys.map((key) => ({
     value: key,
     textStyle: {},
   }))
+
+  const freqMap: Record<string, string> = isAlgoBp ? BP_BAND_FREQ : BAND_FREQ
+  const colorMap: Record<string, string> = isAlgoBp ? BP_BAND_COLORS : EEG_BAND_COLORS
+  const bandValues = snapshot?.bandValues as Record<string, number> | undefined
+  const plottedValues = activeKeys.map((key) => (props.forceNoSignal ? 0 : (bandValues?.[key] ?? 0)))
+  const yAxisMin = isAlgoBp ? Math.min(0, ...plottedValues) : 0
+  const yAxisMax = isPercentScale
+    ? 100
+    : isAlgoBp
+      ? Math.max(yAxisMin + 1, Math.max(0, ...plottedValues))
+      : undefined
 
   return {
     animation: false,
@@ -262,7 +315,7 @@ function buildOption() {
         interval: 0,
         formatter: (key: string) => {
           const name = t(`monitoring.series.${key}`)
-          const freq = BAND_FREQ[key as EegBandKey] ?? ''
+          const freq = freqMap[key] ?? ''
           return `{name|${name}}\n{freq|${freq}}`
         },
         rich: {
@@ -281,13 +334,15 @@ function buildOption() {
     },
     yAxis: {
       type: 'value',
-      min: 0,
-      max: isPercentScale ? 100 : undefined,
+      min: yAxisMin,
+      max: yAxisMax,
       name: props.compact
         ? ''
-        : (isPercentScale
-          ? (effectiveScaleMode.value === 'calibrated' ? t('monitoring.axis.eegCalibrated') : t('monitoring.axis.eegPct'))
-          : t('monitoring.axis.eegPower')),
+        : (isAlgoBp
+          ? t('monitoring.axis.eegPower')
+          : (isPercentScale
+            ? (effectiveScaleMode.value === 'calibrated' ? t('monitoring.axis.eegCalibrated') : t('monitoring.axis.eegPct'))
+            : t('monitoring.axis.eegPower'))),
       nameTextStyle: { color: 'rgba(255, 255, 255, 0.7)' },
       splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
       axisLabel: {
@@ -299,10 +354,10 @@ function buildOption() {
     series: [
       {
         type: 'bar' as const,
-        data: EEG_BAND_KEYS.map((key) => ({
-          value: props.forceNoSignal ? 0 : (snapshot?.bandValues[key] ?? 0),
+        data: activeKeys.map((key, index) => ({
+          value: plottedValues[index],
           itemStyle: {
-            color: EEG_BAND_COLORS[key],
+            color: colorMap[key] ?? '#888',
             borderRadius: [6, 6, 0, 0],
           },
         })),
@@ -343,6 +398,7 @@ watchEffect(() => {
   poorSignalValue.value
   props.compact
   props.scaleMode
+  props.dataSource
   effectiveScaleMode.value
   props.calibrationProfile
   props.showSignalBadge

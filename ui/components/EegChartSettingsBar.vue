@@ -31,8 +31,33 @@
 
     <q-separator vertical color="grey-7" class="q-mx-sm self-stretch" />
 
-    <!-- Scale -->
+    <!-- Data source -->
     <div class="col-auto row items-center q-gutter-xs no-wrap">
+      <span class="text-caption text-grey-5 eeg-chart-settings-bar__label">{{ $t('monitoring.eegSourceLabel') }}</span>
+      <q-btn-group flat>
+        <q-btn
+          dense
+          flat
+          size="sm"
+          :color="dataSource === 'bands' ? 'secondary' : undefined"
+          :label="$t('monitoring.dataSource.bands')"
+          @click="handleDataSourceChange('bands')"
+        />
+        <q-btn
+          dense
+          flat
+          size="sm"
+          :color="dataSource === 'algo-bp' ? 'secondary' : undefined"
+          :label="$t('monitoring.dataSource.algoBp')"
+          @click="handleDataSourceChange('algo-bp')"
+        />
+      </q-btn-group>
+    </div>
+
+    <q-separator vertical color="grey-7" class="q-mx-sm self-stretch" />
+
+    <!-- Scale -->
+    <div v-if="dataSource !== 'algo-bp'" class="col-auto row items-center q-gutter-xs no-wrap">
       <span class="text-caption text-grey-5 eeg-chart-settings-bar__label">{{ $t('monitoring.eegScaleLabel') }}</span>
       <q-select
         dense
@@ -131,18 +156,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { EegBandScaleMode } from '../stores/preferences'
+import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
 
 const props = defineProps<{
   readonly windowSec: number
   readonly scaleMode: EegBandScaleMode
   readonly canUseCalibrated: boolean
   readonly calibratedTooltip?: string | null
+  readonly dataSource: EegDataSource
 }>()
 
 const emit = defineEmits<{
   (e: 'update:windowSec', value: number): void
   (e: 'update:scaleMode', value: EegBandScaleMode): void
+  (e: 'update:dataSource', value: EegDataSource): void
 }>()
 
 const { t } = useI18n()
@@ -222,6 +249,10 @@ function handleCustomInputChange(value: string | number | null) {
 
 function handleScaleChange(value: EegBandScaleMode): void {
   emit('update:scaleMode', value)
+}
+
+function handleDataSourceChange(value: EegDataSource): void {
+  emit('update:dataSource', value)
 }
 </script>
 

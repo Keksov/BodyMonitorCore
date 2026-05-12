@@ -14,16 +14,19 @@ import { RadarChart } from 'echarts/charts'
 import { RadarComponent, TooltipComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
-import type { EegBandScaleMode } from '../stores/preferences'
+import type { EegBandScaleMode, EegDataSource } from '../stores/preferences'
 import type { EegCalibrationProfile } from '../stores/device'
 import {
+  ALGO_BP_KEYS,
+  type AlgoBpKey,
   type EegBandKey,
+  buildAlgoBpSnapshot,
   buildEegBandAveragesSnapshot,
   calibrateBandValues,
   normalizeBandDistribution,
   getLatestSeriesValue,
 } from '../services/eeg-band-snapshot'
-import { EEG_BAND_COLORS } from '../services/eeg-band-colors'
+import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
 use([RadarChart, RadarComponent, TooltipComponent, GraphicComponent, CanvasRenderer])
 
@@ -33,11 +36,13 @@ const props = withDefaults(defineProps<{
   readonly windowSec?: number
   readonly scaleMode?: EegBandScaleMode
   readonly calibrationProfile?: EegCalibrationProfile | null
+  readonly dataSource?: EegDataSource
 }>(), {
   anchorTimestampMs: null,
   windowSec: 30,
   scaleMode: 'normalized',
   calibrationProfile: null,
+  dataSource: 'bands',
 })
 
 const { t } = useI18n()
@@ -47,6 +52,7 @@ let resizeObserver: ResizeObserver | null = null
 
 type RadarBandKey = EegBandKey
 const RADAR_DISPLAY_KEYS: readonly RadarBandKey[] = ['gamma2', 'gamma1', 'beta2', 'beta1', 'delta', 'theta', 'alpha1', 'alpha2']
+const ALGO_BP_RADAR_KEYS: readonly AlgoBpKey[] = ['bpGamma', 'bpBeta', 'bpDelta', 'bpTheta', 'bpAlpha']
 
 const RADAR_OUTLINE_COLOR = 'rgba(255, 255, 255, 0.92)'
 const RADAR_OUTLINE_FILL = 'transparent'
@@ -66,6 +72,22 @@ const BAND_FREQ_LABELS: Record<RadarBandKey, string> = {
   beta2: '17–30 Hz',
   gamma1: '30–40 Hz',
   gamma2: '40–100 Hz',
+}
+
+const ALGO_BP_FREQ_LABELS: Record<AlgoBpKey, string> = {
+  bpDelta: '<4 Hz',
+  bpTheta: '4–8 Hz',
+  bpAlpha: '8–13 Hz',
+  bpBeta: '13–30 Hz',
+  bpGamma: '>30 Hz',
+}
+
+const ALGO_BP_RADAR_COLORS: Record<AlgoBpKey, string> = {
+  bpDelta: COMBINED_EEG_BAND_COLORS.delta,
+  bpTheta: COMBINED_EEG_BAND_COLORS.theta,
+  bpAlpha: COMBINED_EEG_BAND_COLORS.alpha,
+  bpBeta: COMBINED_EEG_BAND_COLORS.beta,
+  bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
 }
 
 const rawValueFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, notation: 'compact' })
@@ -108,11 +130,13 @@ function getRadarGeometry() {
     return null
   }
 
+  const displayKeys = props.dataSource === 'algo-bp' ? ALGO_BP_RADAR_KEYS : RADAR_DISPLAY_KEYS
   return {
     centerX: width * 0.5,
     centerY: height * 0.5,
     radius: Math.min(width, height) * RADAR_RADIUS_FACTOR,
-    angleStepDeg: 360 / RADAR_DISPLAY_KEYS.length,
+    angleStepDeg: 360 / displayKeys.length,
+    displayKeys,
   }
 }
 
@@ -122,11 +146,15 @@ function buildRadarSpokeGraphics() {
     return []
   }
 
-  const { centerX, centerY, radius, angleStepDeg } = geometry
+  const { centerX, centerY, radius, angleStepDeg, displayKeys } = geometry
+  const isAlgoBp = props.dataSource === 'algo-bp'
 
-  return RADAR_DISPLAY_KEYS.map((bandKey, index) => {
+  return displayKeys.map((bandKey, index) => {
     const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
     const angleRad = (angleDeg * Math.PI) / 180
+    const color = isAlgoBp
+      ? ALGO_BP_RADAR_COLORS[bandKey as AlgoBpKey] ?? '#888'
+      : EEG_BAND_COLORS[bandKey as RadarBandKey] ?? '#888'
 
     return {
       type: 'line',
@@ -138,7 +166,7 @@ function buildRadarSpokeGraphics() {
         y2: centerY - radius * Math.sin(angleRad),
       },
       style: {
-        stroke: EEG_BAND_COLORS[bandKey],
+        stroke: color,
         lineWidth: 1.5,
       },
       silent: true,
@@ -153,8 +181,8 @@ function buildRadarBackgroundGraphics() {
     return []
   }
 
-  const { centerX, centerY, radius, angleStepDeg } = geometry
-  const points = RADAR_DISPLAY_KEYS.map((_, index) => {
+  const { centerX, centerY, radius, angleStepDeg, displayKeys } = geometry
+  const points = displayKeys.map((_, index) => {
     const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
     const angleRad = (angleDeg * Math.PI) / 180
 
@@ -189,19 +217,21 @@ function buildRadarBackgroundGraphics() {
   }]
 }
 
-function buildRadarSectorGraphics(values: readonly number[], axisMax: number) {
+function buildRadarSectorGraphics(values: readonly number[], axisMin: number, axisMax: number) {
   const geometry = getRadarGeometry()
-  if (geometry === null || axisMax <= 0) {
+  const axisRange = axisMax - axisMin
+  if (geometry === null || axisRange <= 0) {
     return []
   }
 
-  const { centerX, centerY, radius, angleStepDeg } = geometry
+  const { centerX, centerY, radius, angleStepDeg, displayKeys } = geometry
+  const isAlgoBp = props.dataSource === 'algo-bp'
 
-  return RADAR_DISPLAY_KEYS.flatMap((bandKey, index) => {
-    const nextIndex = (index + 1) % RADAR_DISPLAY_KEYS.length
-    const nextBandKey = RADAR_DISPLAY_KEYS[nextIndex]
-    const valueRatio = Math.max(0, Math.min(1, values[index] / axisMax))
-    const nextValueRatio = Math.max(0, Math.min(1, values[nextIndex] / axisMax))
+  return displayKeys.flatMap((bandKey, index) => {
+    const nextIndex = (index + 1) % displayKeys.length
+    const nextBandKey = displayKeys[nextIndex]
+    const valueRatio = Math.max(0, Math.min(1, (values[index] - axisMin) / axisRange))
+    const nextValueRatio = Math.max(0, Math.min(1, (values[nextIndex] - axisMin) / axisRange))
     const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
     const nextAngleDeg = RADAR_START_ANGLE_DEG + nextIndex * angleStepDeg
     const angleRad = (angleDeg * Math.PI) / 180
@@ -218,6 +248,13 @@ function buildRadarSectorGraphics(values: readonly number[], axisMax: number) {
     ] as const
     const sectorRadius = Math.max(1, radius * Math.max(valueRatio, nextValueRatio))
 
+    const color0 = isAlgoBp
+      ? ALGO_BP_RADAR_COLORS[bandKey as AlgoBpKey] ?? '#888'
+      : EEG_BAND_COLORS[bandKey as RadarBandKey] ?? '#888'
+    const color1 = isAlgoBp
+      ? ALGO_BP_RADAR_COLORS[nextBandKey as AlgoBpKey] ?? '#888'
+      : EEG_BAND_COLORS[nextBandKey as RadarBandKey] ?? '#888'
+
     return [
       {
         type: 'polygon',
@@ -233,8 +270,8 @@ function buildRadarSectorGraphics(values: readonly number[], axisMax: number) {
             x2: nextPointX,
             y2: nextPointY,
             colorStops: [
-              { offset: 0, color: hexToRgba(EEG_BAND_COLORS[bandKey], RADAR_BAND_FILL_OPACITY) },
-              { offset: 1, color: hexToRgba(EEG_BAND_COLORS[nextBandKey], RADAR_BAND_FILL_OPACITY) },
+              { offset: 0, color: hexToRgba(color0, RADAR_BAND_FILL_OPACITY) },
+              { offset: 1, color: hexToRgba(color1, RADAR_BAND_FILL_OPACITY) },
             ],
             global: true,
           },
@@ -275,11 +312,22 @@ const effectiveScaleMode = computed<EegBandScaleMode>(() => {
 })
 
 const radarData = computed(() => {
+  if (props.dataSource === 'algo-bp') {
+    const bpSnapshot = buildAlgoBpSnapshot(props.data, props.windowSec, props.anchorTimestampMs)
+    if (bpSnapshot === null) return null
+
+    const displayValues = bpSnapshot.bandValues as Record<string, number>
+    const axisMin = Math.min(0, ...Object.values(bpSnapshot.bandValues))
+    const axisMax = Math.max(axisMin + 1, Math.max(0, ...Object.values(bpSnapshot.bandValues)))
+    return { displayValues, axisMin, axisMax, isPercent: false }
+  }
+
   const bandSnapshot = buildEegBandAveragesSnapshot(props.data, props.windowSec, props.anchorTimestampMs)
   if (bandSnapshot === null) return null
 
   const rawBandValues = bandSnapshot.bandValues
   let displayValues: Record<RadarBandKey, number>
+  let axisMin = 0
   let axisMax: number
   let isPercent: boolean
 
@@ -303,7 +351,7 @@ const radarData = computed(() => {
     isPercent = false
   }
 
-  return { displayValues, axisMax, isPercent }
+  return { displayValues, axisMin, axisMax, isPercent }
 })
 
 // PoorSignal badge — resolved at anchorTimestampMs, not the last session point
@@ -329,28 +377,35 @@ const signalBadgeColor = computed(() => {
 
 function buildRadarOption() {
   const d = radarData.value
+  const axisMin = d?.axisMin ?? 0
   const axisMax = d?.axisMax ?? 100
   const isPercent = d?.isPercent ?? true
+  const isAlgoBp = props.dataSource === 'algo-bp'
+  const displayKeys: readonly string[] = isAlgoBp ? ALGO_BP_RADAR_KEYS : RADAR_DISPLAY_KEYS
+  const freqLabels: Record<string, string> = isAlgoBp ? ALGO_BP_FREQ_LABELS : BAND_FREQ_LABELS
+  const bandColors: Record<string, string> = isAlgoBp ? ALGO_BP_RADAR_COLORS : EEG_BAND_COLORS
+
   const labelRich = Object.fromEntries(
-    RADAR_DISPLAY_KEYS.map((key) => [key, {
-      color: EEG_BAND_COLORS[key],
+    displayKeys.map((key) => [key, {
+      color: bandColors[key] ?? '#888',
       fontSize: 11,
       lineHeight: 14,
       fontWeight: 600,
     }]),
   )
 
-  const indicator = RADAR_DISPLAY_KEYS.map((key) => ({
-    name: `{${key}|${t(`monitoring.series.${key}`)}}\n{${key}|${BAND_FREQ_LABELS[key]}}`,
+  const indicator = displayKeys.map((key) => ({
+    name: `{${key}|${t(`monitoring.series.${key}`)}}\n{${key}|${freqLabels[key] ?? ''}}`,
+    min: axisMin,
     max: axisMax,
   }))
 
   const values = d !== null
-    ? RADAR_DISPLAY_KEYS.map((key) => d.displayValues[key])
-    : RADAR_DISPLAY_KEYS.map(() => 0)
+    ? displayKeys.map((key) => (d.displayValues as Record<string, number>)[key] ?? 0)
+    : displayKeys.map(() => 0)
 
-  const bandSeries = RADAR_DISPLAY_KEYS.map((bandKey, bandIndex) => {
-    const nextBandIndex = (bandIndex + 1) % RADAR_DISPLAY_KEYS.length
+  const bandSeries = displayKeys.map((bandKey, bandIndex) => {
+    const nextBandIndex = (bandIndex + 1) % displayKeys.length
 
     return {
       type: 'radar' as const,
@@ -373,22 +428,22 @@ function buildRadarOption() {
     tooltip: {
       trigger: 'item',
       formatter: (params: { readonly seriesName?: string; readonly value?: number | number[] }) => {
-        const bandKey = params.seriesName as RadarBandKey | '__outline' | undefined
+        const bandKey = params.seriesName as string | '__outline' | undefined
         if (bandKey === undefined || bandKey === '__outline') {
           return ''
         }
 
-        const bandIndex = RADAR_DISPLAY_KEYS.indexOf(bandKey)
+        const bandIndex = displayKeys.indexOf(bandKey)
         const vals = Array.isArray(params.value) ? params.value : []
         const bandValue = bandIndex >= 0 ? vals[bandIndex] ?? 0 : 0
         const formatted = isPercent
           ? `${bandValue.toFixed(1)}%`
           : rawValueFormatter.format(bandValue)
 
-        return `${t(`monitoring.series.${bandKey}`)}<br/>${BAND_FREQ_LABELS[bandKey]}: ${formatted}`
+        return `${t(`monitoring.series.${bandKey}`)}<br/>${freqLabels[bandKey] ?? ''}: ${formatted}`
       },
     },
-    graphic: [...buildRadarBackgroundGraphics(), ...buildRadarSectorGraphics(values, axisMax), ...buildRadarSpokeGraphics()],
+    graphic: [...buildRadarBackgroundGraphics(), ...buildRadarSectorGraphics(values, axisMin, axisMax), ...buildRadarSpokeGraphics()],
     radar: {
       shape: 'polygon',
       center: ['50%', '50%'],

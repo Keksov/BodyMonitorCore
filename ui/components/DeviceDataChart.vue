@@ -20,9 +20,10 @@ import {
   type GraphicComponentOption,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import type { LogChartDataSnapshot, LogChartPanel, LogChartSeries, LogChartSeriesKey } from '@protocol'
+import { ALGO_BP_SERIES_KEYS, type LogChartDataSnapshot, type LogChartPanel, type LogChartSeries, type LogChartSeriesKey } from '@protocol'
 import type { EegDisplayMode } from '../stores/preferences'
 import {
+  COMBINED_EEG_BAND_COLORS,
   EEG_BAND_COLORS,
 } from '../services/eeg-band-colors'
 
@@ -50,6 +51,7 @@ interface ChartAxisLayout {
   readonly panelIndexByName: Readonly<Record<LogChartPanel, number | null>>
   readonly valueAxisIndexByPanel: Readonly<Record<LogChartPanel, number | null>>
   readonly rrAxisIndex: number | null
+  readonly eegBpAxisIndex: number | null
 }
 
 type ChartGridLayoutKey =
@@ -149,6 +151,7 @@ const legendSelection = ref<Record<string, boolean> | null>(null)
 let resizeObserver: ResizeObserver | null = null
 let chartInstance: ECharts | null = null
 let lastPointCount = 0
+const ALGO_BP_SERIES_KEY_SET = new Set<string>(ALGO_BP_SERIES_KEYS)
 
 const seriesColorByKey: Record<LogChartSeriesKey, string> = {
   hr: '#ff6b6b',
@@ -159,6 +162,11 @@ const seriesColorByKey: Record<LogChartSeriesKey, string> = {
   attention: '#2a9d8f',
   meditation: '#457b9d',
   ...EEG_BAND_COLORS,
+  bpDelta: COMBINED_EEG_BAND_COLORS.delta,
+  bpTheta: COMBINED_EEG_BAND_COLORS.theta,
+  bpAlpha: COMBINED_EEG_BAND_COLORS.alpha,
+  bpBeta: COMBINED_EEG_BAND_COLORS.beta,
+  bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
 }
 
 function labelForSeries(key: LogChartSeriesKey): string {
@@ -387,17 +395,12 @@ function buildStandardOption(
   zoomDefaults: object,
   breathAxisExtent: number,
   entries: readonly BuiltSeriesEntry[],
-  yAxisOverride?: MonitoringChartOption['yAxis'],
+  yAxis: MonitoringChartOption['yAxis'],
 ): MonitoringChartOption {
   const graphic = [
     ...buildChartGraphics(axisLayout, grid),
     buildPoorSignalBadge(snapshot, chartRoot.value?.clientWidth ?? 960, chartRoot.value?.clientHeight ?? 520),
   ]
-
-  const yAxis = yAxisOverride ?? buildAxisLayout(panels).yAxis.map((axis, index) => {
-    if (axisLayout.valueAxisIndexByPanel.breath !== index) return axis
-    return { ...axis, min: -breathAxisExtent, max: breathAxisExtent, interval: breathAxisExtent * 2 }
-  })
 
   return {
     animation: false,
@@ -581,7 +584,15 @@ function createLeftAxisLabelStyle(fontSize = 12) {
   }
 }
 
-function buildAxisLayout(panels: readonly LogChartPanel[]) {
+function isAlgoBpSeriesKey(key: LogChartSeriesKey): boolean {
+  return ALGO_BP_SERIES_KEY_SET.has(key)
+}
+
+function buildAxisLayout(
+  panels: readonly LogChartPanel[],
+  hasAlgoBpSeries: boolean,
+  hasPrimaryEegSeries: boolean,
+) {
   const panelIndexByName: Record<LogChartPanel, number | null> = {
     ecg: null,
     breath: null,
@@ -599,6 +610,7 @@ function buildAxisLayout(panels: readonly LogChartPanel[]) {
   }
 
   let rrAxisIndex: number | null = null
+  let eegBpAxisIndex: number | null = null
   const yAxis: MonitoringChartOption['yAxis'] = []
 
   for (const panel of panels) {
@@ -650,16 +662,28 @@ function buildAxisLayout(panels: readonly LogChartPanel[]) {
       continue
     }
 
+    const shouldUsePrimaryEegAxis = hasPrimaryEegSeries || !hasAlgoBpSeries
     valueAxisIndexByPanel.eeg = yAxis.length
     yAxis.push({
       type: 'value',
       gridIndex,
-      name: t('monitoring.axis.eeg'),
+      name: shouldUsePrimaryEegAxis ? t('monitoring.axis.eeg') : t('monitoring.axis.eegPower'),
       nameGap: LEFT_AXIS_NAME_GAP,
       nameTextStyle: createLeftAxisNameTextStyle(),
       axisLabel: createLeftAxisLabelStyle(),
       scale: true,
     })
+
+    if (hasAlgoBpSeries && hasPrimaryEegSeries) {
+      eegBpAxisIndex = yAxis.length
+      yAxis.push({
+        type: 'value',
+        gridIndex,
+        name: t('monitoring.axis.eegPower'),
+        position: 'right',
+        scale: true,
+      })
+    }
   }
 
   return {
@@ -667,6 +691,7 @@ function buildAxisLayout(panels: readonly LogChartPanel[]) {
       panelIndexByName,
       valueAxisIndexByPanel,
       rrAxisIndex,
+      eegBpAxisIndex,
     } satisfies ChartAxisLayout,
     yAxis,
   }
@@ -732,6 +757,8 @@ function buildSeriesEntries(item: LogChartSeries, axisLayout: ChartAxisLayout): 
   const xAxisIndex = axisLayout.panelIndexByName[item.panel] ?? 0
   const yAxisIndex = item.key === 'rr'
     ? axisLayout.rrAxisIndex ?? axisLayout.valueAxisIndexByPanel.ecg ?? 0
+    : isAlgoBpSeriesKey(item.key)
+      ? axisLayout.eegBpAxisIndex ?? axisLayout.valueAxisIndexByPanel[item.panel] ?? 0
     : axisLayout.valueAxisIndexByPanel[item.panel] ?? 0
   const common = {
     name,
@@ -782,6 +809,10 @@ function buildOption(snapshot: LogChartDataSnapshot, includeViewportDefaults: bo
   const allPanels = resolveVisiblePanels(snapshot)
   const panels = eegMode === 'radar' ? allPanels.filter((p) => p !== 'eeg') : allPanels
   const effectivePanels = panels.length > 0 ? panels : ['ecg' as const]
+  const visibleSeries = snapshot.series
+    .filter((item) => item.points.length > 0 && (eegMode !== 'radar' || item.panel !== 'eeg'))
+  const hasAlgoBpSeries = visibleSeries.some((item) => isAlgoBpSeriesKey(item.key))
+  const hasPrimaryEegSeries = visibleSeries.some((item) => item.panel === 'eeg' && !isAlgoBpSeriesKey(item.key))
 
   const xAxisIndices = effectivePanels.map((_, index) => index)
   const timeRangeMs = getTimeRangeMs(snapshot)
@@ -790,10 +821,9 @@ function buildOption(snapshot: LogChartDataSnapshot, includeViewportDefaults: bo
   const zoomDefaults = includeViewportDefaults ? resolveZoomDefaults(snapshot, props.viewportPreset) : {}
 
   const grid = buildGridLayout(effectivePanels)
-  const { layout: axisLayout, yAxis } = buildAxisLayout(effectivePanels)
+  const { layout: axisLayout, yAxis } = buildAxisLayout(effectivePanels, hasAlgoBpSeries, hasPrimaryEegSeries)
   const breathAxisExtent = resolveBreathAxisExtent(axisLayout, grid)
-  const entries = snapshot.series
-    .filter((item) => item.points.length > 0 && (eegMode !== 'radar' || item.panel !== 'eeg'))
+  const entries = visibleSeries
     .flatMap((item) => buildSeriesEntries(item, axisLayout))
 
   // bands or radar (radar: EEG excluded from panels above)

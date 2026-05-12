@@ -2462,7 +2462,13 @@ begin
     end;
 
     if bytesAvail = 0 then
+    begin
+        // Some PTY/pipe setups can report WAIT_OBJECT_0 with no readable bytes.
+        // Sleep for the caller timeout to avoid a hot spin in server loops.
+        if aTimeoutMs > 0 then
+            Sleep(aTimeoutMs);
         Exit;
+    end;
 
     Result := readStdinLine(aLine);
     aReachedEof := not Result;

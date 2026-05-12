@@ -21,6 +21,24 @@ export interface EegBandAveragesSnapshot {
   readonly sampleCounts: Record<EegBandKey, number>
 }
 
+export const ALGO_BP_KEYS = [
+  'bpDelta',
+  'bpTheta',
+  'bpAlpha',
+  'bpBeta',
+  'bpGamma',
+] as const
+
+export type AlgoBpKey = (typeof ALGO_BP_KEYS)[number]
+
+export type AlgoBpValues = Record<AlgoBpKey, number>
+
+export interface AlgoBpSnapshot {
+  readonly anchorTimestampMs: number
+  readonly bandValues: AlgoBpValues
+  readonly sampleCounts: Record<AlgoBpKey, number>
+}
+
 interface AverageWithCount {
   readonly value: number
   readonly count: number
@@ -119,6 +137,48 @@ export function buildEegBandAveragesSnapshot(
     const startTimestampMs = anchorMs - normalizedWindowSec * 1000
 
     for (const bandKey of EEG_BAND_KEYS) {
+      const average = getWindowAverage(getSeriesPoints(snapshot, bandKey), startTimestampMs, anchorMs)
+      bandValues[bandKey] = average.value
+      sampleCounts[bandKey] = average.count
+    }
+  }
+
+  return {
+    anchorTimestampMs: anchorMs,
+    bandValues,
+    sampleCounts,
+  }
+}
+
+export function buildAlgoBpSnapshot(
+  snapshot: LogChartDataSnapshot,
+  windowSec: number,
+  anchorTimestampMs?: number | null,
+): AlgoBpSnapshot | null {
+  const anchorMs = resolveAnchorTimestampMs(snapshot, anchorTimestampMs)
+  if (anchorMs === null) {
+    return null
+  }
+
+  const bandValues = {} as AlgoBpValues
+  const sampleCounts = {} as Record<AlgoBpKey, number>
+
+  if (windowSec === 0) {
+    for (const bandKey of ALGO_BP_KEYS) {
+      const latest = getLatestSeriesValue(snapshot, bandKey, anchorMs)
+      if (latest !== null) {
+        bandValues[bandKey] = latest
+        sampleCounts[bandKey] = 1
+      } else {
+        bandValues[bandKey] = 0
+        sampleCounts[bandKey] = 0
+      }
+    }
+  } else {
+    const normalizedWindowSec = Math.max(1, Math.trunc(windowSec))
+    const startTimestampMs = anchorMs - normalizedWindowSec * 1000
+
+    for (const bandKey of ALGO_BP_KEYS) {
       const average = getWindowAverage(getSeriesPoints(snapshot, bandKey), startTimestampMs, anchorMs)
       bandValues[bandKey] = average.value
       sampleCounts[bandKey] = average.count

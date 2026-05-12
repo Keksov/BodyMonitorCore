@@ -3,15 +3,19 @@ import { ref, watch } from 'vue'
 
 export type EegDisplayMode = 'radar' | 'bands'
 export type EegBandScaleMode = 'raw' | 'normalized' | 'calibrated'
+export type EegDataSource = 'bands' | 'algo-bp'
 
 const EEG_MODE_KEY = 'eegDisplayMode'
 const EEG_BAND_WINDOW_SEC_KEY = 'eegBandWindowSec'
 const EEG_BAND_SCALE_MODE_KEY = 'eegBandScaleMode'
+const EEG_DATA_SOURCE_KEY = 'eegDataSource'
 const EEG_MODE_DEFAULT: EegDisplayMode = 'bands'
 const EEG_BAND_WINDOW_SEC_DEFAULT = 10
 const EEG_BAND_SCALE_MODE_DEFAULT: EegBandScaleMode = 'raw'
+const EEG_DATA_SOURCE_DEFAULT: EegDataSource = 'bands'
 const VALID_EEG_MODES: readonly EegDisplayMode[] = ['bands', 'radar']
 const VALID_EEG_BAND_SCALE_MODES: readonly EegBandScaleMode[] = ['raw', 'normalized', 'calibrated']
+const VALID_EEG_DATA_SOURCES: readonly EegDataSource[] = ['bands', 'algo-bp']
 
 function sanitizeEegBandWindowSec(value: unknown): number {
   const parsed = typeof value === 'number'
@@ -57,10 +61,20 @@ function readStoredEegBandScaleMode(): EegBandScaleMode {
   return EEG_BAND_SCALE_MODE_DEFAULT
 }
 
+function readStoredEegDataSource(): EegDataSource {
+  const stored = localStorage.getItem(EEG_DATA_SOURCE_KEY)
+  if (stored !== null && (VALID_EEG_DATA_SOURCES as readonly string[]).includes(stored)) {
+    return stored as EegDataSource
+  }
+
+  return EEG_DATA_SOURCE_DEFAULT
+}
+
 export const usePreferencesStore = defineStore('preferences', () => {
   const eegDisplayMode = ref<EegDisplayMode>(readStoredEegMode())
   const eegBandWindowSec = ref<number>(readStoredEegBandWindowSec())
   const eegBandScaleMode = ref<EegBandScaleMode>(readStoredEegBandScaleMode())
+  const eegDataSource = ref<EegDataSource>(readStoredEegDataSource())
 
   watch(eegDisplayMode, (mode) => {
     localStorage.setItem(EEG_MODE_KEY, mode)
@@ -80,9 +94,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
     localStorage.setItem(EEG_BAND_SCALE_MODE_KEY, mode)
   })
 
+  watch(eegDataSource, (source) => {
+    localStorage.setItem(EEG_DATA_SOURCE_KEY, source)
+  })
+
   return {
     eegDisplayMode,
     eegBandWindowSec,
     eegBandScaleMode,
+    eegDataSource,
   }
 })

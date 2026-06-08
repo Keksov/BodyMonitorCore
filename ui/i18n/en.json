@@ -30,7 +30,7 @@
     "bandLatestPoint": "Latest point at {time}",
     "eegWindowLabel": "Averaging window",
     "eegDataCorrectionLabel": "Data Correction",
-    "eegSourceLabel": "Source",
+    "eegSourceLabel": "Data",
     "eegWindow": {
       "noAveraging": "No averaging",
       "sec5": "5 sec",
@@ -44,8 +44,8 @@
       "calibrated": "Calibrated"
     },
     "dataSource": {
-      "bands": "ThinkGear",
-      "algoBp": "Algo BP"
+      "bands": "Low-level measurements",
+      "algoBp": "Signal power dB"
     },
     "eegSettingsHelp": {
       "title": "Help: EEG chart settings",
@@ -53,9 +53,13 @@
       "windowNoAveraging": "the single latest data point before the cursor is used. Reflects an instantaneous value but is more sensitive to noise.",
       "windowPresets": "average of all data points within the respective period before the cursor. A larger window produces a more stable result but reacts more slowly to rapid changes.",
       "windowCustom": "set the window length manually in seconds (minimum 1).",
+      "sourceIntro": "Selects which EEG stream is displayed in the chart.",
+      "sourceBands": "direct low-level ThinkGear rhythm measurements in device units. Values are unsigned integers from the ASIC chip — always ≥ 0 but not tied to physical units. Not comparable across sessions or headsets.",
+      "sourceAlgoBp": "Algo SDK rhythm power in decibels (dB). Values are floating-point and can be negative: dB = 10·log₁₀(P/P₀), where P₀ is the DLL's internal reference undocumented by NeuroSky. Cross-session absolute comparison is unreliable; comparing which band dominates at a given moment is valid.",
       "correctionIntro": "Determines how band values are corrected before they are displayed on the radar and bar charts.",
       "correctionRaw": "absolute power values in ThinkGear SDK units. Not comparable across sessions or headsets, but reflects the device's actual measurements.",
-      "correctionCalibrated": "each band value is shown as 0–100 % relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms."
+      "correctionCalibrated": "each band value is shown as 0–100 % relative to the personal minimum and maximum obtained during calibration. Requires completing all three calibration modes (Attention, Relaxation, Drowse-in). Enables evaluating the current state against individual norms.",
+      "correctionUnavailableForAlgoBp": "Data correction is unavailable for the Signal power dB source."
     },
     "badge": {
       "signalGood": "Signal: good",

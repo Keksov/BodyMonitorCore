@@ -8,6 +8,30 @@
             <div class="text-caption text-grey-5">
               {{ $t('monitoring.chartLiveSubtitle') }}
             </div>
+            <div class="q-mt-sm row items-center q-gutter-sm">
+              <template v-if="session.isConnecting">
+                <q-btn color="warning" disable dense>
+                  <q-spinner-hourglass size="xs" class="q-mr-sm" />
+                  {{ $t('deviceControl.connecting') }}
+                </q-btn>
+              </template>
+              <q-btn
+                v-else-if="showRecordingStopButton"
+                dense
+                color="negative"
+                :label="$t('deviceControl.stopRecordingButton')"
+                :disable="!session.canStop"
+                @click="onMonitoringStop"
+              />
+              <q-btn
+                v-else
+                dense
+                color="secondary"
+                :label="$t('deviceControl.startRecordingButton')"
+                :disable="isRecordingStartDisabled"
+                @click="onMonitoringConnect"
+              />
+            </div>
           </div>
 
           <div class="monitoring-page__header-side column items-end">
@@ -93,7 +117,7 @@
               </q-chip>
 
               <q-chip
-                v-if="!canUseCalibratedCorrection"
+                v-if="preferences.eegDataSource === 'bands' && !canUseCalibratedCorrection"
                 dense
                 color="warning"
                 text-color="black"
@@ -102,7 +126,7 @@
               </q-chip>
 
               <q-chip
-                v-if="canUseCalibratedCorrection && preferences.eegDataCorrection === 'calibrated'"
+                v-if="preferences.eegDataSource === 'bands' && canUseCalibratedCorrection && preferences.eegDataCorrection === 'calibrated'"
                 dense
                 color="blue-grey-8"
                 text-color="blue-grey-2"
@@ -245,6 +269,8 @@ import { useI18n } from 'vue-i18n'
 import SessionControls from '../components/SessionControls.vue'
 import { useEegDiagnosticsPump } from '../composables/use-eeg-diagnostics-pump'
 import { useChartDataSource } from '../composables/use-chart-data-source'
+import { useBodyMonitorSessionStarter } from '../composables/use-bodymonitor-session-starter'
+import { useWs } from '../composables/use-ws'
 import { useSessionStore } from '../stores/session'
 import { usePreferencesStore } from '../stores/preferences'
 import { useDeviceStore } from '../stores/device'
@@ -269,8 +295,25 @@ const audio = useAudioStore()
 const { t } = useI18n()
 const audioTransport = useAudioTransport()
 const { activeChartData } = useChartDataSource()
+const { startMonitoring } = useBodyMonitorSessionStarter()
+const ws = useWs()
 useEegDiagnosticsPump()
 const viewportPreset = ref<ChartViewportPreset>('recent')
+
+const showRecordingStopButton = computed(
+  () => session.bodyMonitorState === 'running' && !session.isConnecting,
+)
+const isRecordingStartDisabled = computed(
+  () => !session.canStart || !device.areAllRequiredConnectTargetsReady,
+)
+
+function onMonitoringConnect(): void {
+  startMonitoring()
+}
+
+function onMonitoringStop(): void {
+  ws.send({ type: 'bodymonitor_stdio_stop' })
+}
 const viewportToken = ref(0)
 
 const EEG_SPLIT_STORAGE_KEY = 'monitoring-page-eeg-split-px'

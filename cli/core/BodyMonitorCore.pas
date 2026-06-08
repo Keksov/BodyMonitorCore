@@ -603,6 +603,7 @@ procedure TBodyMonitorCore.runContinuousRead();
 var
     errCode: Integer;
     lastPrintTick: QWord;
+    packetsRead: Integer;
 begin
     errCode := MWM15_setFilterType(FconnectionId, MWM15_FILTER_TYPE_50HZ);
     if errCode < 0 then
@@ -610,19 +611,23 @@ begin
         TLogCore.writeConsoleLine(Flogger, Format('WARN: MWM15_setFilterType() returned %d.', [errCode]));
     end;
 
-    errCode := TG_EnableAutoRead(FconnectionId, 1);
-    if errCode <> 0 then
-    begin
-        TLogCore.writeErrorLine(Flogger, Format('ERROR: TG_EnableAutoRead() returned %d.', [errCode]));
-        Exit;
-    end;
-
     TLogCore.writeConsoleLine(Flogger, 'Reading data... Press Ctrl+C to stop.');
     lastPrintTick := 0;
 
-        while not FstopRequested do
+    while not FstopRequested do
     begin
-        readAndFeedAlgoData();
+        // Manual packet reads keep TG_GetValueStatus aligned with the latest packet.
+        packetsRead := TG_ReadPackets(FconnectionId, 1);
+        if packetsRead > 0 then
+        begin
+            readAndFeedAlgoData();
+        end
+        else if packetsRead < -2 then
+        begin
+            TLogCore.writeErrorLine(Flogger, Format('ERROR: TG_ReadPackets() returned %d.', [packetsRead]));
+            Break;
+        end;
+
         updateEegConnectionState();
 
         if (GetTickCount64() - lastPrintTick) >= 1000 then
@@ -634,7 +639,8 @@ begin
         if Flogger <> nil then
             Flogger.flush;
 
-        Sleep(1);
+        if packetsRead = -2 then
+            Sleep(1);
     end;
 end;
 

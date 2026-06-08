@@ -24,3 +24,4 @@ UI composition contract:
 - `ui` exports `createBodyMonitorPlugin` for runtime wiring; the host must provide both `ws` and `replay` adapters before rendering BodyMonitor pages.
 - BodyMonitor owns its module-local navigation namespace, including `nav.monitoring`.
 - Host shells such as MindWaveCore own only shell concerns like top-level navigation, archive/log pages, and app bootstrap.
+

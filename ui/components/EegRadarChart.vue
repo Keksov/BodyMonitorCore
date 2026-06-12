@@ -1,9 +1,26 @@
 <template>
-  <div class="eeg-radar-chart" ref="chartRoot">
-    <div v-if="signalBadgeText" class="eeg-radar-chart__badge" :style="{ color: signalBadgeColor }">
-      {{ signalBadgeText }}
-    </div>
-  </div>
+  <eeg-chart-side-panel-layout
+    ref="sidePanelLayoutRef"
+    :ui-state-scope="resolvedUiStateScope"
+    storage-key="eeg-shared-side-panel-visible"
+    :panel-title="t('monitoring.eegLine.signalsTitle')"
+    :panel-aria-label="t('monitoring.eegLine.signalsTitle')"
+    :open-button-label="t('monitoring.eegLine.openPanel')"
+    :close-button-label="t('monitoring.eegLine.closePanel')"
+    :show-open-button="showSidePanelOpenButton"
+  >
+    <div class="eeg-radar-chart" ref="chartRoot" />
+
+    <template #overlay>
+      <div v-if="signalBadgeText" class="eeg-radar-chart__badge" :style="{ color: signalBadgeColor }">
+        {{ signalBadgeText }}
+      </div>
+    </template>
+
+    <template #panelBody>
+      <eeg-signal-style-list-panel :entries="signalPanelEntries" />
+    </template>
+  </eeg-chart-side-panel-layout>
 </template>
 
 <script setup lang="ts">
@@ -14,10 +31,12 @@ import { RadarChart } from 'echarts/charts'
 import { RadarComponent, TooltipComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
+import EegChartSidePanelLayout from './EegChartSidePanelLayout.vue'
+import EegSignalStyleListPanel from './EegSignalStyleListPanel.vue'
 import type { EegDataCorrection, EegDataSource } from '../stores/preferences'
 import type { EegCalibrationProfile } from '../stores/device'
+import { useEegSignalStyleStore } from '../stores/eeg-signal-style'
 import {
-  ALGO_BP_KEYS,
   type AlgoBpKey,
   type EegBandKey,
   buildAlgoBpSnapshot,
@@ -25,7 +44,6 @@ import {
   calibrateBandValues,
   getLatestSeriesValue,
 } from '../services/eeg-band-snapshot'
-import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
 use([RadarChart, RadarComponent, TooltipComponent, GraphicComponent, CanvasRenderer])
 
@@ -36,18 +54,33 @@ const props = withDefaults(defineProps<{
   readonly dataCorrection?: EegDataCorrection
   readonly calibrationProfile?: EegCalibrationProfile | null
   readonly dataSource?: EegDataSource
+  readonly uiStateScope?: string | null
+  readonly showSidePanelOpenButton?: boolean
 }>(), {
   anchorTimestampMs: null,
   windowSec: 30,
   dataCorrection: 'raw',
   calibrationProfile: null,
   dataSource: 'bands',
+  uiStateScope: null,
+  showSidePanelOpenButton: true,
 })
 
 const { t } = useI18n()
+const signalStyleStore = useEegSignalStyleStore()
+const sidePanelLayoutRef = ref<{
+  openPanel?: () => void
+  closePanel?: () => void
+  isPanelVisible?: () => boolean
+} | null>(null)
 const chartRoot = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+
+const resolvedUiStateScope = computed<string | null>(() => {
+  const rawScope = props.uiStateScope?.trim()
+  return rawScope !== undefined && rawScope !== '' ? rawScope : null
+})
 
 type RadarBandKey = EegBandKey
 const RADAR_DISPLAY_KEYS: readonly RadarBandKey[] = ['gamma2', 'gamma1', 'beta2', 'beta1', 'delta', 'theta', 'alpha1', 'alpha2']
@@ -81,13 +114,22 @@ const ALGO_BP_FREQ_LABELS: Record<AlgoBpKey, string> = {
   bpGamma: '>30 Hz',
 }
 
-const ALGO_BP_RADAR_COLORS: Record<AlgoBpKey, string> = {
-  bpDelta: COMBINED_EEG_BAND_COLORS.delta,
-  bpTheta: COMBINED_EEG_BAND_COLORS.theta,
-  bpAlpha: COMBINED_EEG_BAND_COLORS.alpha,
-  bpBeta: COMBINED_EEG_BAND_COLORS.beta,
-  bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
-}
+const displaySignalKeys = computed<readonly string[]>(() => {
+  return props.dataSource === 'algo-bp' ? [...ALGO_BP_RADAR_KEYS] : [...RADAR_DISPLAY_KEYS]
+})
+
+const signalPanelEntries = computed(() => {
+  return displaySignalKeys.value.map((key) => ({
+    key,
+    label: t(`monitoring.series.${key}`),
+  }))
+})
+
+const radarStyleToken = computed(() => {
+  return displaySignalKeys.value
+    .map((key) => `${key}:${signalStyleStore.getSignalStyle(key).color}`)
+    .join('|')
+})
 
 const rawValueFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, notation: 'compact' })
 
@@ -122,6 +164,10 @@ function formatSignalBadgeText(label: string, value: number): string {
   return `${label} ${qualityPercent}%`
 }
 
+function getSignalColor(signalKey: string): string {
+  return signalStyleStore.getSignalStyle(signalKey).color
+}
+
 function getRadarGeometry() {
   const width = chartRoot.value?.clientWidth ?? 0
   const height = chartRoot.value?.clientHeight ?? 0
@@ -129,7 +175,7 @@ function getRadarGeometry() {
     return null
   }
 
-  const displayKeys = props.dataSource === 'algo-bp' ? ALGO_BP_RADAR_KEYS : RADAR_DISPLAY_KEYS
+  const displayKeys = displaySignalKeys.value
   return {
     centerX: width * 0.5,
     centerY: height * 0.5,
@@ -146,14 +192,11 @@ function buildRadarSpokeGraphics() {
   }
 
   const { centerX, centerY, radius, angleStepDeg, displayKeys } = geometry
-  const isAlgoBp = props.dataSource === 'algo-bp'
 
   return displayKeys.map((bandKey, index) => {
     const angleDeg = RADAR_START_ANGLE_DEG + index * angleStepDeg
     const angleRad = (angleDeg * Math.PI) / 180
-    const color = isAlgoBp
-      ? ALGO_BP_RADAR_COLORS[bandKey as AlgoBpKey] ?? '#888'
-      : EEG_BAND_COLORS[bandKey as RadarBandKey] ?? '#888'
+    const color = getSignalColor(bandKey)
 
     return {
       type: 'line',
@@ -224,7 +267,6 @@ function buildRadarSectorGraphics(values: readonly number[], axisMin: number, ax
   }
 
   const { centerX, centerY, radius, angleStepDeg, displayKeys } = geometry
-  const isAlgoBp = props.dataSource === 'algo-bp'
 
   return displayKeys.flatMap((bandKey, index) => {
     const nextIndex = (index + 1) % displayKeys.length
@@ -247,12 +289,8 @@ function buildRadarSectorGraphics(values: readonly number[], axisMin: number, ax
     ] as const
     const sectorRadius = Math.max(1, radius * Math.max(valueRatio, nextValueRatio))
 
-    const color0 = isAlgoBp
-      ? ALGO_BP_RADAR_COLORS[bandKey as AlgoBpKey] ?? '#888'
-      : EEG_BAND_COLORS[bandKey as RadarBandKey] ?? '#888'
-    const color1 = isAlgoBp
-      ? ALGO_BP_RADAR_COLORS[nextBandKey as AlgoBpKey] ?? '#888'
-      : EEG_BAND_COLORS[nextBandKey as RadarBandKey] ?? '#888'
+    const color0 = getSignalColor(bandKey)
+    const color1 = getSignalColor(nextBandKey)
 
     return [
       {
@@ -375,9 +413,11 @@ function buildRadarOption() {
   const axisMax = d?.axisMax ?? 100
   const isPercent = d?.isPercent ?? true
   const isAlgoBp = props.dataSource === 'algo-bp'
-  const displayKeys: readonly string[] = isAlgoBp ? ALGO_BP_RADAR_KEYS : RADAR_DISPLAY_KEYS
+  const displayKeys: readonly string[] = displaySignalKeys.value
   const freqLabels: Record<string, string> = isAlgoBp ? ALGO_BP_FREQ_LABELS : BAND_FREQ_LABELS
-  const bandColors: Record<string, string> = isAlgoBp ? ALGO_BP_RADAR_COLORS : EEG_BAND_COLORS
+  const bandColors: Record<string, string> = Object.fromEntries(
+    displayKeys.map((key) => [key, getSignalColor(key)]),
+  ) as Record<string, string>
 
   const labelRich = Object.fromEntries(
     displayKeys.map((key) => [key, {
@@ -497,6 +537,7 @@ onMounted(() => {
 
 watchEffect(() => {
   radarData.value
+  radarStyleToken.value
   signalBadgeText.value
   signalBadgeColor.value
   renderChart()
@@ -507,6 +548,24 @@ onBeforeUnmount(() => {
   resizeObserver = null
   chartInstance?.dispose()
   chartInstance = null
+})
+
+function openSidePanel(): void {
+  sidePanelLayoutRef.value?.openPanel?.()
+}
+
+function closeSidePanel(): void {
+  sidePanelLayoutRef.value?.closePanel?.()
+}
+
+function isSidePanelVisible(): boolean {
+  return sidePanelLayoutRef.value?.isPanelVisible?.() === true
+}
+
+defineExpose({
+  openSidePanel,
+  closeSidePanel,
+  isSidePanelVisible,
 })
 </script>
 
@@ -519,9 +578,6 @@ onBeforeUnmount(() => {
 }
 
 .eeg-radar-chart__badge {
-  position: absolute;
-  top: 8px;
-  right: 12px;
   font-size: 11px;
   background: rgba(0, 0, 0, 0.35);
   padding: 2px 8px;

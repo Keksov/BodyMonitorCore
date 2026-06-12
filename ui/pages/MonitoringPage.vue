@@ -159,11 +159,12 @@
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                       :force-no-signal="isSelectedEegOffline"
                       :data-source="preferences.eegDataSource"
+                      ui-state-scope="monitoring-page"
                       show-signal-badge
                     />
 
                     <eeg-radar-chart
-                      v-else
+                      v-else-if="preferences.eegDisplayMode === 'radar'"
                       class="monitoring-page__chart"
                       :data="activeChartData"
                       :anchor-timestamp-ms="activeBandAnchorTimestampMs"
@@ -171,6 +172,25 @@
                       :data-correction="preferences.eegDataCorrection"
                       :calibration-profile="activeEegCalibrationProfile"
                       :data-source="preferences.eegDataSource"
+                      ui-state-scope="monitoring-page"
+                    />
+
+                    <eeg-line-timeline-chart
+                      v-else
+                      class="monitoring-page__chart"
+                      :data="activeChartData"
+                      :window-sec="preferences.eegBandWindowSec"
+                      :data-correction="preferences.eegDataCorrection"
+                      :calibration-profile="activeEegCalibrationProfile"
+                      :anchor-timestamp-ms="activeBandAnchorTimestampMs"
+                      :data-source="preferences.eegDataSource"
+                      :timeline-start-timestamp-ms="monitoringTimelineStartTimestampMs"
+                      :timeline-duration-sec="monitoringTimelineDurationSec"
+                      :time-viewport-start-sec="monitoringTimeViewportStartSec"
+                      :time-viewport-end-sec="monitoringTimeViewportEndSec"
+                      ui-state-scope="monitoring-page"
+                      :show-signal-badge="!isSelectedEegOffline"
+                      @update:time-viewport="handleMonitoringTimeViewportUpdate"
                     />
                   </div>
                 </template>
@@ -185,8 +205,11 @@
                       :transport-state="monitoringScheduleTransportState"
                       :track-state-busy="true"
                       :can-seek="monitoringCanSeek"
+                      :time-viewport-start-sec="monitoringTimeViewportStartSec"
+                      :time-viewport-end-sec="monitoringTimeViewportEndSec"
                       ui-state-scope="monitoring-page"
                       @seek="handleMonitoringAudioSeek"
+                      @update:time-viewport="handleMonitoringTimeViewportUpdate"
                     >
                       <template #transportControls>
                         <gnaural-transport-controls
@@ -219,11 +242,12 @@
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
                 :force-no-signal="isSelectedEegOffline"
                 :data-source="preferences.eegDataSource"
+                ui-state-scope="monitoring-page"
                 show-signal-badge
               />
 
               <eeg-radar-chart
-                v-else
+                v-else-if="preferences.eegDisplayMode === 'radar'"
                 class="monitoring-page__chart"
                 :data="activeChartData"
                 :anchor-timestamp-ms="activeBandAnchorTimestampMs"
@@ -231,6 +255,25 @@
                 :data-correction="preferences.eegDataCorrection"
                 :calibration-profile="activeEegCalibrationProfile"
                 :data-source="preferences.eegDataSource"
+                ui-state-scope="monitoring-page"
+              />
+
+              <eeg-line-timeline-chart
+                v-else
+                class="monitoring-page__chart"
+                :data="activeChartData"
+                :window-sec="preferences.eegBandWindowSec"
+                :data-correction="preferences.eegDataCorrection"
+                :calibration-profile="activeEegCalibrationProfile"
+                :anchor-timestamp-ms="activeBandAnchorTimestampMs"
+                :data-source="preferences.eegDataSource"
+                :timeline-start-timestamp-ms="monitoringTimelineStartTimestampMs"
+                :timeline-duration-sec="monitoringTimelineDurationSec"
+                :time-viewport-start-sec="monitoringTimeViewportStartSec"
+                :time-viewport-end-sec="monitoringTimeViewportEndSec"
+                ui-state-scope="monitoring-page"
+                :show-signal-badge="!isSelectedEegOffline"
+                @update:time-viewport="handleMonitoringTimeViewportUpdate"
               />
             </template>
           </template>
@@ -284,6 +327,7 @@ type ChartViewportPreset = 'fit' | 'recent'
 const DeviceDataChart = defineAsyncComponent(() => import('../components/DeviceDataChart.vue'))
 const EegRadarChart = defineAsyncComponent(() => import('../components/EegRadarChart.vue'))
 const EegCurrentReadingsChart = defineAsyncComponent(() => import('../components/EegCurrentReadingsChart.vue'))
+const EegLineTimelineChart = defineAsyncComponent(() => import('../components/EegLineTimelineChart.vue'))
 const EegChartSettingsBar = defineAsyncComponent(() => import('../components/EegChartSettingsBar.vue'))
 const GnauralScheduleView = defineAsyncComponent(() => import('../../../GnauralCore/ui/components/GnauralScheduleView.vue'))
 const GnauralTransportControls = defineAsyncComponent(() => import('../../../GnauralCore/ui/components/GnauralTransportControls.vue'))
@@ -449,6 +493,39 @@ const monitoringCanSeek = computed(() => {
   return audioTransport.canSeek.value
 })
 
+interface TimeViewportPayload {
+  readonly startSec: number
+  readonly endSec: number
+}
+
+const monitoringTimeViewportStartSec = ref<number | null>(null)
+const monitoringTimeViewportEndSec = ref<number | null>(null)
+
+const monitoringTimelineDurationSec = computed<number | null>(() => {
+  const totalTimeSec = currentGnauralSchedule.value?.totalTimeSec
+  if (typeof totalTimeSec !== 'number' || !Number.isFinite(totalTimeSec) || totalTimeSec <= 0) {
+    return null
+  }
+
+  return totalTimeSec
+})
+
+const monitoringTimelineStartTimestampMs = computed<number | null>(() => {
+  const durationSec = monitoringTimelineDurationSec.value
+  if (durationSec === null) {
+    return null
+  }
+
+  const anchorTimestampMs = activeBandAnchorTimestampMs.value
+  const positionSec = monitoringSchedulePositionSec.value
+  if (anchorTimestampMs === undefined || !Number.isFinite(positionSec)) {
+    return null
+  }
+
+  const normalizedPositionSec = Math.max(0, Math.min(positionSec, durationSec))
+  return Math.round(anchorTimestampMs - (normalizedPositionSec * 1000))
+})
+
 const monitoringStartStopLabel = computed(() => {
   return audioTransport.startStopButtonLabel.value
 })
@@ -517,6 +594,7 @@ interface EegModeOption {
 const eegModeOptions = computed<EegModeOption[]>(() => [
   { value: 'bands', icon: 'bar_chart', tooltip: t('monitoring.eegMode.bands') },
   { value: 'radar', icon: 'radar', tooltip: t('monitoring.eegMode.radar') },
+  { value: 'line', icon: 'show_chart', tooltip: t('monitoring.eegMode.line') },
 ])
 
 const chartError = computed(() => session.lastError)
@@ -546,6 +624,54 @@ watch(canUseCalibratedCorrection, (isAvailable) => {
     preferences.eegDataCorrection = 'raw'
   }
 }, { immediate: true })
+
+watch(showGnauralSchedule, (isVisible) => {
+  if (!isVisible) {
+    monitoringTimeViewportStartSec.value = null
+    monitoringTimeViewportEndSec.value = null
+  }
+})
+
+function normalizeMonitoringTimeViewport(viewport: TimeViewportPayload): TimeViewportPayload | null {
+  const durationSec = monitoringTimelineDurationSec.value
+  if (durationSec === null || !Number.isFinite(viewport.startSec) || !Number.isFinite(viewport.endSec)) {
+    return null
+  }
+
+  const minViewportSec = 0.2
+  const maxStartSec = Math.max(0, durationSec - minViewportSec)
+  const clampedStartSec = Math.max(0, Math.min(viewport.startSec, maxStartSec))
+  const clampedEndSec = Math.min(
+    Math.max(viewport.endSec, clampedStartSec + minViewportSec),
+    durationSec,
+  )
+
+  return {
+    startSec: clampedStartSec,
+    endSec: clampedEndSec,
+  }
+}
+
+function handleMonitoringTimeViewportUpdate(viewport: TimeViewportPayload): void {
+  const normalizedViewport = normalizeMonitoringTimeViewport(viewport)
+  if (normalizedViewport === null) {
+    return
+  }
+
+  const currentStartSec = monitoringTimeViewportStartSec.value
+  const currentEndSec = monitoringTimeViewportEndSec.value
+  if (
+    currentStartSec !== null
+    && currentEndSec !== null
+    && Math.abs(currentStartSec - normalizedViewport.startSec) < 0.0001
+    && Math.abs(currentEndSec - normalizedViewport.endSec) < 0.0001
+  ) {
+    return
+  }
+
+  monitoringTimeViewportStartSec.value = normalizedViewport.startSec
+  monitoringTimeViewportEndSec.value = normalizedViewport.endSec
+}
 
 function requestViewport(preset: ChartViewportPreset) {
   viewportPreset.value = preset

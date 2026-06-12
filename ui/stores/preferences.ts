@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-export type EegDisplayMode = 'radar' | 'bands'
+export type EegDisplayMode = 'radar' | 'bands' | 'line'
 export type EegDataCorrection = 'raw' | 'calibrated'
 export type EegDataSource = 'bands' | 'algo-bp'
 
@@ -13,7 +13,7 @@ const EEG_MODE_DEFAULT: EegDisplayMode = 'bands'
 const EEG_BAND_WINDOW_SEC_DEFAULT = 10
 const EEG_DATA_CORRECTION_DEFAULT: EegDataCorrection = 'raw'
 const EEG_DATA_SOURCE_DEFAULT: EegDataSource = 'bands'
-const VALID_EEG_MODES: readonly EegDisplayMode[] = ['bands', 'radar']
+const VALID_EEG_MODES: readonly EegDisplayMode[] = ['bands', 'radar', 'line']
 const VALID_EEG_DATA_CORRECTIONS: readonly EegDataCorrection[] = ['raw', 'calibrated']
 const VALID_EEG_DATA_SOURCES: readonly EegDataSource[] = ['bands', 'algo-bp']
 

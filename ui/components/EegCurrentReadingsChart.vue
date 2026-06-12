@@ -1,19 +1,36 @@
 <template>
-  <div class="eeg-current-readings-chart" :class="{ 'eeg-current-readings-chart--compact': compact }">
-    <div ref="chartRoot" class="eeg-current-readings-chart__canvas" />
+  <eeg-chart-side-panel-layout
+    ref="sidePanelLayoutRef"
+    :ui-state-scope="resolvedUiStateScope"
+    storage-key="eeg-shared-side-panel-visible"
+    :panel-title="t('monitoring.eegLine.signalsTitle')"
+    :panel-aria-label="t('monitoring.eegLine.signalsTitle')"
+    :open-button-label="t('monitoring.eegLine.openPanel')"
+    :close-button-label="t('monitoring.eegLine.closePanel')"
+    :show-open-button="showSidePanelOpenButton"
+  >
+    <div class="eeg-current-readings-chart" :class="{ 'eeg-current-readings-chart--compact': compact }">
+      <div ref="chartRoot" class="eeg-current-readings-chart__canvas" />
 
-    <div
-      v-if="showSignalBadge && signalBadgeText"
-      class="eeg-current-readings-chart__badge"
-      :style="{ color: signalBadgeColor }"
-    >
-      {{ signalBadgeText }}
+      <div v-if="showStateHint && stateHintText !== null" class="eeg-current-readings-chart__state-hint">
+        {{ stateHintText }}
+      </div>
     </div>
 
-    <div v-if="showStateHint && stateHintText !== null" class="eeg-current-readings-chart__state-hint">
-      {{ stateHintText }}
-    </div>
-  </div>
+    <template #overlay>
+      <div
+        v-if="showSignalBadge && signalBadgeText"
+        class="eeg-current-readings-chart__badge"
+        :style="{ color: signalBadgeColor }"
+      >
+        {{ signalBadgeText }}
+      </div>
+    </template>
+
+    <template #panelBody>
+      <eeg-signal-style-list-panel :entries="signalPanelEntries" />
+    </template>
+  </eeg-chart-side-panel-layout>
 </template>
 
 <script setup lang="ts">
@@ -24,8 +41,11 @@ import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { LogChartDataSnapshot } from '@protocol'
+import EegChartSidePanelLayout from './EegChartSidePanelLayout.vue'
+import EegSignalStyleListPanel from './EegSignalStyleListPanel.vue'
 import type { EegCalibrationProfile } from '../stores/device'
 import type { EegDataCorrection, EegDataSource } from '../stores/preferences'
+import { useEegSignalStyleStore } from '../stores/eeg-signal-style'
 import {
   ALGO_BP_KEYS,
   EEG_BAND_KEYS,
@@ -36,7 +56,6 @@ import {
   calibrateBandValues,
   getLatestSeriesValue,
 } from '../services/eeg-band-snapshot'
-import { COMBINED_EEG_BAND_COLORS, EEG_BAND_COLORS } from '../services/eeg-band-colors'
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -52,6 +71,8 @@ const props = withDefaults(defineProps<{
   readonly forceNoSignal?: boolean
   readonly emptyHintText?: string | null
   readonly dataSource?: EegDataSource
+  readonly uiStateScope?: string | null
+  readonly showSidePanelOpenButton?: boolean
 }>(), {
   windowSec: 1,
   dataCorrection: 'raw',
@@ -63,10 +84,18 @@ const props = withDefaults(defineProps<{
   forceNoSignal: false,
   emptyHintText: null,
   dataSource: 'bands',
+  uiStateScope: null,
+  showSidePanelOpenButton: true,
 })
 
 const { t } = useI18n()
+const signalStyleStore = useEegSignalStyleStore()
 
+const sidePanelLayoutRef = ref<{
+  openPanel?: () => void
+  closePanel?: () => void
+  isPanelVisible?: () => boolean
+} | null>(null)
 const chartRoot = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
@@ -90,14 +119,6 @@ const BP_BAND_FREQ: Record<AlgoBpKey, string> = {
   bpGamma: '>30 Hz',
 }
 
-const BP_BAND_COLORS: Record<AlgoBpKey, string> = {
-  bpDelta: COMBINED_EEG_BAND_COLORS.delta,
-  bpTheta: COMBINED_EEG_BAND_COLORS.theta,
-  bpAlpha: COMBINED_EEG_BAND_COLORS.alpha,
-  bpBeta: COMBINED_EEG_BAND_COLORS.beta,
-  bpGamma: COMBINED_EEG_BAND_COLORS.gamma,
-}
-
 const percentValueFormatter = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
@@ -114,6 +135,25 @@ const effectiveDataCorrection = computed<EegDataCorrection>(() => {
   }
 
   return props.calibrationProfile?.isComplete === true ? 'calibrated' : 'raw'
+})
+
+const resolvedUiStateScope = computed<string | null>(() => {
+  const rawScope = props.uiStateScope?.trim()
+  return rawScope !== undefined && rawScope !== '' ? rawScope : null
+})
+
+const signalPanelEntries = computed(() => {
+  const keys: readonly string[] = props.dataSource === 'algo-bp' ? ALGO_BP_KEYS : EEG_BAND_KEYS
+  return keys.map((key) => ({
+    key,
+    label: t(`monitoring.series.${key}`),
+  }))
+})
+
+const barStyleToken = computed(() => {
+  return [...EEG_BAND_KEYS, ...ALGO_BP_KEYS]
+    .map((key) => `${key}:${signalStyleStore.getSignalStyle(key).color}`)
+    .join('|')
 })
 
 const chartSnapshot = computed(() => {
@@ -273,7 +313,9 @@ function buildOption() {
   }))
 
   const freqMap: Record<string, string> = isAlgoBp ? BP_BAND_FREQ : BAND_FREQ
-  const colorMap: Record<string, string> = isAlgoBp ? BP_BAND_COLORS : EEG_BAND_COLORS
+  const colorMap: Record<string, string> = Object.fromEntries(
+    activeKeys.map((key) => [key, signalStyleStore.getSignalStyle(key).color]),
+  ) as Record<string, string>
   const bandValues = snapshot?.bandValues as Record<string, number> | undefined
   const plottedValues = activeKeys.map((key) => (props.forceNoSignal ? 0 : (bandValues?.[key] ?? 0)))
   const yAxisMin = isAlgoBp ? Math.min(0, ...plottedValues) : 0
@@ -391,6 +433,7 @@ onMounted(() => {
 watchEffect(() => {
   chartSnapshot.value
   poorSignalValue.value
+  barStyleToken.value
   props.compact
   props.dataCorrection
   props.dataSource
@@ -409,6 +452,24 @@ onBeforeUnmount(() => {
   resizeObserver = null
   chartInstance?.dispose()
   chartInstance = null
+})
+
+function openSidePanel(): void {
+  sidePanelLayoutRef.value?.openPanel?.()
+}
+
+function closeSidePanel(): void {
+  sidePanelLayoutRef.value?.closePanel?.()
+}
+
+function isSidePanelVisible(): boolean {
+  return sidePanelLayoutRef.value?.isPanelVisible?.() === true
+}
+
+defineExpose({
+  openSidePanel,
+  closeSidePanel,
+  isSidePanelVisible,
 })
 </script>
 
@@ -435,9 +496,6 @@ onBeforeUnmount(() => {
 }
 
 .eeg-current-readings-chart__badge {
-  position: absolute;
-  top: 8px;
-  right: 10px;
   font-size: 11px;
   background: rgba(0, 0, 0, 0.35);
   padding: 2px 8px;

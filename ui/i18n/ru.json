@@ -23,7 +23,35 @@
     "modeLoaded": "Загружено",
     "eegMode": {
       "bands": "Столбцы ритмов",
-      "radar": "Радар"
+      "radar": "Радар",
+      "line": "Линии"
+    },
+    "eegLine": {
+      "signalsTitle": "Сигналы ЭЭГ",
+      "signalsSubtitle": "Видно {visible}/{total}",
+      "showAll": "Показать все",
+      "hideAll": "Скрыть все",
+      "openPanel": "Показать панель сигналов",
+      "closePanel": "Скрыть панель сигналов"
+    },
+    "eegStyle": {
+      "colorAction": "Цвет",
+      "openEditor": "Редактировать стиль сигнала",
+      "editorTitle": "Параметр",
+      "colorLabel": "Цвет",
+      "lineTypeLabel": "Тип линии",
+      "glowLabel": "Свечение",
+      "glowOff": "выкл",
+      "glowValue": "{value}",
+      "previewLabel": "Предпросмотр",
+      "lineType": {
+        "solid": "Сплошная",
+        "dashed": "Штриховая",
+        "dotted": "Пунктирная",
+        "twodash": "Двойной штрих",
+        "longdash": "Длинный штрих",
+        "dotdash": "Точка-штрих"
+      }
     },
     "bandWindowSec": "Окно ЭЭГ (сек)",
     "bandWindowRange": "Среднее {start} - {end}",

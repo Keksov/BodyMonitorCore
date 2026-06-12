@@ -23,7 +23,35 @@
     },
     "eegMode": {
       "bands": "Band bars",
-      "radar": "Radar"
+      "radar": "Radar",
+      "line": "Line"
+    },
+    "eegLine": {
+      "signalsTitle": "EEG signals",
+      "signalsSubtitle": "{visible}/{total} visible",
+      "showAll": "Show all",
+      "hideAll": "Hide all",
+      "openPanel": "Show signals panel",
+      "closePanel": "Hide signals panel"
+    },
+    "eegStyle": {
+      "colorAction": "Color",
+      "openEditor": "Edit signal style",
+      "editorTitle": "Signal style",
+      "colorLabel": "Color",
+      "lineTypeLabel": "Line type",
+      "glowLabel": "Glow",
+      "glowOff": "off",
+      "glowValue": "{value}",
+      "previewLabel": "Preview",
+      "lineType": {
+        "solid": "Solid",
+        "dashed": "Dashed",
+        "dotted": "Dotted",
+        "twodash": "Two dash",
+        "longdash": "Long dash",
+        "dotdash": "Dot dash"
+      }
     },
     "bandWindowSec": "EEG window (sec)",
     "bandWindowRange": "Avg {start} - {end}",
